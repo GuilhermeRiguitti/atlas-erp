@@ -1,0 +1,206 @@
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { Prisma, TenantTitular } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+import { UsersService } from '../users/users.service';
+import { CreateTenantDto } from './dto/create-tenant.dto';
+import { CreateTenantTitularDto } from './dto/create-tenant-titular.dto';
+import { UpdateTenantDto } from './dto/update-tenant.dto';
+
+const tenantInclude = {
+  titulares: {
+    include: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      },
+    },
+    orderBy: { createdAt: 'asc' },
+  },
+  serviceInvoices: {
+    orderBy: { createdAt: 'desc' },
+    take: 10,
+  },
+} satisfies Prisma.TenantInclude;
+
+type TenantWithRelations = Prisma.TenantGetPayload<{
+  include: typeof tenantInclude;
+}>;
+
+@Injectable()
+export class TenantsService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly usersService: UsersService,
+  ) {}
+
+  async create(dto: CreateTenantDto) {
+    await this.ensureCnpjIsAvailable(dto.cnpj);
+    const tenant = await this.prisma.tenant.create({
+      data: this.normalizeCreateTenantData(dto),
+      include: tenantInclude,
+    });
+
+    return this.serializeTenant(tenant);
+  }
+
+  async findAll(query?: string) {
+    const tenants = await this.prisma.tenant.findMany({
+      where: query
+        ? {
+            OR: [
+              { legalName: { contains: query } },
+              { tradeName: { contains: query } },
+              { cnpj: { contains: query.replace(/\D/g, '') } },
+            ],
+          }
+        : undefined,
+      orderBy: { createdAt: 'desc' },
+      include: tenantInclude,
+    });
+
+    return tenants.map((tenant) => this.serializeTenant(tenant));
+  }
+
+  async findOne(id: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id },
+      include: tenantInclude,
+    });
+    if (!tenant) {
+      throw new NotFoundException('Tenant not found');
+    }
+
+    return this.serializeTenant(tenant);
+  }
+
+  async update(id: string, dto: UpdateTenantDto) {
+    await this.findOne(id);
+    if (dto.cnpj) {
+      await this.ensureCnpjIsAvailable(dto.cnpj, id);
+    }
+
+    const tenant = await this.prisma.tenant.update({
+      where: { id },
+      data: this.normalizeUpdateTenantData(dto),
+      include: tenantInclude,
+    });
+
+    return this.serializeTenant(tenant);
+  }
+
+  async addTitular(tenantId: string, dto: CreateTenantTitularDto) {
+    await this.findOne(tenantId);
+    await this.usersService.findOne(dto.userId);
+
+    const titular = await this.prisma.tenantTitular
+      .create({
+        data: {
+          tenantId,
+          userId: dto.userId,
+          role: dto.role,
+          title: dto.title,
+          ownershipPercentage: dto.ownershipPercentage,
+          isLegalRepresentative: dto.isLegalRepresentative,
+          canIssueInvoices: dto.canIssueInvoices,
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+              status: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          },
+        },
+      })
+      .catch((error: unknown) => {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002'
+        ) {
+          throw new ConflictException(
+            'User is already a titular for this tenant',
+          );
+        }
+        throw error;
+      });
+
+    return this.serializeTitular(titular);
+  }
+
+  async removeTitular(tenantId: string, titularId: string) {
+    await this.findOne(tenantId);
+    await this.prisma.tenantTitular.delete({ where: { id: titularId } });
+    return { id: titularId };
+  }
+
+  private normalizeCreateTenantData(
+    dto: CreateTenantDto,
+  ): Prisma.TenantCreateInput {
+    return {
+      ...dto,
+      cnpj: dto.cnpj.replace(/\D/g, ''),
+      addressZipCode: dto.addressZipCode.replace(/\D/g, ''),
+      addressState: dto.addressState?.toUpperCase(),
+    };
+  }
+
+  private normalizeUpdateTenantData(
+    dto: UpdateTenantDto,
+  ): Prisma.TenantUpdateInput {
+    return {
+      ...dto,
+      cnpj: dto.cnpj?.replace(/\D/g, ''),
+      addressZipCode: dto.addressZipCode?.replace(/\D/g, ''),
+      addressState: dto.addressState?.toUpperCase(),
+    };
+  }
+
+  private async ensureCnpjIsAvailable(cnpj: string, ignoredTenantId?: string) {
+    const existing = await this.prisma.tenant.findUnique({
+      where: { cnpj: cnpj.replace(/\D/g, '') },
+    });
+    if (existing && existing.id !== ignoredTenantId) {
+      throw new ConflictException('CNPJ already in use');
+    }
+  }
+
+  private serializeTenant(tenant: TenantWithRelations) {
+    return {
+      ...tenant,
+      titulares: tenant.titulares.map((titular) =>
+        this.serializeTitular(titular),
+      ),
+      serviceInvoices: tenant.serviceInvoices.map((invoice) => ({
+        ...invoice,
+        amount: Number(invoice.amount),
+        deductions: Number(invoice.deductions),
+        issRate: invoice.issRate ? Number(invoice.issRate) : null,
+      })),
+    };
+  }
+
+  private serializeTitular(titular: TenantTitular & { user?: unknown }) {
+    return {
+      ...titular,
+      ownershipPercentage: titular.ownershipPercentage
+        ? Number(titular.ownershipPercentage)
+        : null,
+    };
+  }
+}

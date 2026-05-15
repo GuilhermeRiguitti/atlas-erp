@@ -1,0 +1,41 @@
+{
+  "name": "atlas-users-suite",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Portfolio monorepo with a NestJS API, Next.js dashboard, Prisma ORM and iron-session authentication.",
+  "packageManager": "pnpm@11.1.1",
+  "scripts": {
+    "dev": "pnpm --parallel --filter api --filter web dev",
+    "dev:api": "pnpm --filter api start:dev",
+    "dev:web": "pnpm --filter web dev",
+    "build": "pnpm -r build",
+    "build:api": "pnpm --filter api build",
+    "build:web": "pnpm --filter web build",
+    "lint": "pnpm -r lint",
+    "test": "pnpm --filter api test",
+    "format": "pnpm -r format",
+    "db:generate": "pnpm --filter api prisma:generate",
+    "db:push": "pnpm --filter api prisma:push",
+    "db:migrate": "pnpm --filter api prisma:migrate",
+    "db:migrate:deploy": "pnpm --filter api prisma:migrate:deploy",
+    "db:migrate:reset": "pnpm --filter api prisma:migrate:reset",
+    "db:seed": "pnpm --filter api prisma:seed",
+    "db:studio": "pnpm --filter api prisma:studio",
+    "docker:up": "docker compose up --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f"
+  },
+  "devDependencies": {
+    "prettier": "^3.7.4"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@nestjs/core",
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "sharp",
+      "unrs-resolver"
+    ]
+  }
+}

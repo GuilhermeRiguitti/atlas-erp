@@ -1,0 +1,11 @@
+.git
+node_modules
+**/node_modules
+.next
+**/.next
+dist
+**/dist
+coverage
+*.log
+apps/api/prisma/dev.db
+apps/api/prisma/dev.db-journal

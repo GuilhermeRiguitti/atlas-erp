@@ -1,0 +1,57 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: atlas-users-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: atlas_users
+      MYSQL_USER: atlas
+      MYSQL_PASSWORD: atlas_password
+      MYSQL_ROOT_PASSWORD: root_password
+    command: --log-bin-trust-function-creators=1
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uatlas -patlas_password --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      target: api
+    container_name: atlas-users-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: mysql://atlas:atlas_password@mysql:3306/atlas_users
+      PORT: 3333
+      WEB_ORIGIN: http://localhost:3000
+      NFEIO_BASE_URL: https://api.nfe.io
+      NFEIO_INVOICE_KEY: ""
+    ports:
+      - "3333:3333"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      target: web
+    container_name: atlas-users-web
+    restart: unless-stopped
+    environment:
+      API_URL: http://api:3333
+      NEXT_PUBLIC_APP_NAME: ERP Fiscal
+      IRON_SESSION_PASSWORD: complex_password_at_least_32_characters_long_for_portfolio
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  mysql_data:
