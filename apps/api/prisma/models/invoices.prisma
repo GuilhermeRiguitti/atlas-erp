@@ -1,0 +1,54 @@
+enum FiscalProvider {
+  MOCK
+  NFE_IO
+}
+
+enum ServiceInvoiceStatus {
+  DRAFT
+  PROCESSING
+  AUTHORIZED
+  REJECTED
+  CANCELLED
+}
+
+model ServiceInvoice {
+  id                   String               @id @default(cuid())
+  tenantId             String
+  clientId             String?
+  issuedByUserId       String?
+  status               ServiceInvoiceStatus @default(DRAFT)
+  provider             FiscalProvider       @default(MOCK)
+  providerExternalId   String?
+  verificationCode     String?
+  rpsNumber            String?
+  serviceDescription   String               @db.Text
+  serviceCode          String?
+  cnaeCode             String?
+  municipalTaxCode     String?
+  borrowerName         String
+  borrowerDocument     String
+  borrowerEmail        String?
+  borrowerStreet       String?
+  borrowerNumber       String?
+  borrowerNeighborhood String?
+  borrowerCity         String?
+  borrowerState        String?
+  borrowerZipCode      String?
+  amount               Decimal              @db.Decimal(12, 2)
+  deductions           Decimal              @default(0) @db.Decimal(12, 2)
+  issRate              Decimal?             @db.Decimal(5, 4)
+  notes                String?              @db.Text
+  providerPayload      Json?
+  providerResponse     Json?
+  issuedAt             DateTime?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  tenant               Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client               Client?              @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  issuedBy             User?                @relation("IssuedServiceInvoices", fields: [issuedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([clientId])
+  @@index([status])
+  @@index([providerExternalId])
+}

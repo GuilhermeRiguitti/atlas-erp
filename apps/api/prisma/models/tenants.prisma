@@ -1,0 +1,100 @@
+enum TenantStatus {
+  ACTIVE
+  ONBOARDING
+  SUSPENDED
+}
+
+enum TenantTaxRegime {
+  SIMPLES_NACIONAL
+  LUCRO_PRESUMIDO
+  LUCRO_REAL
+  MEI
+}
+
+enum TenantTitularRole {
+  OWNER
+  PARTNER
+  ACCOUNTANT
+  FINANCIAL_MANAGER
+}
+
+enum TenantFiscalCredentialStatus {
+  ACTIVE
+  DISABLED
+}
+
+model Tenant {
+  id                      String            @id @default(cuid())
+  legalName               String
+  tradeName               String?
+  cnpj                    String            @unique
+  status                  TenantStatus      @default(ONBOARDING)
+  taxRegime               TenantTaxRegime   @default(SIMPLES_NACIONAL)
+  municipalRegistration   String?
+  stateRegistration       String?
+  cnae                    String?
+  serviceTaxCode          String?
+  municipalServiceCode    String?
+  fiscalProvider          FiscalProvider    @default(MOCK)
+  fiscalProviderCompanyId String?
+  contactEmail            String
+  contactPhone            String?
+  addressStreet           String
+  addressNumber           String
+  addressComplement       String?
+  addressNeighborhood     String
+  addressCity             String
+  addressState            String
+  addressCityIbgeCode     String
+  addressZipCode          String
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+  titulares               TenantTitular[]
+  fiscalCredentials       TenantFiscalCredential[]
+  clients                 Client[]
+  serviceInvoices         ServiceInvoice[]
+
+  @@index([legalName])
+  @@index([status])
+  @@index([addressCityIbgeCode])
+}
+
+model TenantTitular {
+  id                    String            @id @default(cuid())
+  tenantId              String
+  userId                String
+  role                  TenantTitularRole @default(OWNER)
+  title                 String?
+  ownershipPercentage   Decimal?          @db.Decimal(5, 2)
+  isLegalRepresentative Boolean           @default(false)
+  canIssueInvoices      Boolean           @default(true)
+  joinedAt              DateTime          @default(now())
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  tenant                Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user                  User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@index([userId])
+  @@index([tenantId])
+}
+
+model TenantFiscalCredential {
+  id                           String                       @id @default(cuid())
+  tenantId                     String
+  provider                     FiscalProvider
+  status                       TenantFiscalCredentialStatus @default(ACTIVE)
+  providerCompanyId            String
+  encryptedApiKey              String                       @db.Text
+  apiKeyLast4                  String?
+  encryptedCertificatePassword String?                      @db.Text
+  encryptedCertificatePfx      String?                      @db.LongText
+  metadata                     Json?
+  createdAt                    DateTime                     @default(now())
+  updatedAt                    DateTime                     @updatedAt
+  tenant                       Tenant                       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, provider])
+  @@index([tenantId])
+  @@index([provider])
+}

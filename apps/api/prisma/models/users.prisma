@@ -1,0 +1,46 @@
+enum UserRole {
+  ADMIN
+  MEMBER
+  RECRUITER
+}
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+}
+
+model User {
+  id                    String           @id @default(cuid())
+  name                  String
+  email                 String           @unique
+  passwordHash          String
+  role                  UserRole         @default(MEMBER)
+  status                UserStatus       @default(ACTIVE)
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  profile               UserProfile?
+  tenantTitularities    TenantTitular[]
+  createdClients        Client[]         @relation("CreatedClients")
+  issuedServiceInvoices ServiceInvoice[] @relation("IssuedServiceInvoices")
+
+  @@index([name])
+  @@index([status])
+}
+
+model UserProfile {
+  id           String   @id @default(cuid())
+  headline     String
+  bio          String   @db.Text
+  location     String
+  seniority    String
+  skills       String   @db.Text
+  availability String
+  website      String?
+  github       String?
+  linkedin     String?
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}

@@ -17,7 +17,7 @@ describe('AppController', () => {
   describe('root', () => {
     it('should return API health', () => {
       expect(appController.getHealth()).toMatchObject({
-        name: 'Atlas Users API',
+        name: 'ERP Fiscal API',
         status: 'ok',
       });
     });

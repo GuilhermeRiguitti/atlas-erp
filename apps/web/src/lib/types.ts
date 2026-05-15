@@ -4,6 +4,7 @@ export type TenantStatus = "ACTIVE" | "ONBOARDING" | "SUSPENDED";
 export type TenantTaxRegime = "SIMPLES_NACIONAL" | "LUCRO_PRESUMIDO" | "LUCRO_REAL" | "MEI";
 export type TenantTitularRole = "OWNER" | "PARTNER" | "ACCOUNTANT" | "FINANCIAL_MANAGER";
 export type FiscalProvider = "MOCK" | "NFE_IO";
+export type TenantFiscalCredentialStatus = "ACTIVE" | "DISABLED";
 export type ServiceInvoiceStatus = "DRAFT" | "PROCESSING" | "AUTHORIZED" | "REJECTED" | "CANCELLED";
 export type ClientType = "INDIVIDUAL" | "COMPANY";
 export type ClientStatus = "ACTIVE" | "INACTIVE";
@@ -44,6 +45,18 @@ export type TenantTitular = {
   canIssueInvoices: boolean;
   joinedAt: string;
   user: User;
+};
+
+export type TenantFiscalCredential = {
+  id: string;
+  tenantId: string;
+  provider: FiscalProvider;
+  status: TenantFiscalCredentialStatus;
+  providerCompanyId: string;
+  apiKeyLast4?: string | null;
+  hasApiKey: boolean;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type Client = {
@@ -124,6 +137,7 @@ export type Tenant = {
   addressCityIbgeCode: string;
   addressZipCode: string;
   titulares: TenantTitular[];
+  fiscalCredentials?: TenantFiscalCredential[];
   clients?: Client[];
   serviceInvoices: ServiceInvoice[];
   createdAt: string;

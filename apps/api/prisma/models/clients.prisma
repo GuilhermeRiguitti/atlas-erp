@@ -1,0 +1,43 @@
+enum ClientType {
+  INDIVIDUAL
+  COMPANY
+}
+
+enum ClientStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model Client {
+  id                    String           @id @default(cuid())
+  tenantId              String
+  createdByUserId       String?
+  type                  ClientType       @default(COMPANY)
+  status                ClientStatus     @default(ACTIVE)
+  name                  String
+  tradeName             String?
+  document              String
+  email                 String?
+  phone                 String?
+  municipalRegistration String?
+  stateRegistration     String?
+  addressStreet         String?
+  addressNumber         String?
+  addressComplement     String?
+  addressNeighborhood   String?
+  addressCity           String?
+  addressState          String?
+  addressZipCode        String?
+  notes                 String?          @db.Text
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  tenant                Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy             User?            @relation("CreatedClients", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  serviceInvoices       ServiceInvoice[]
+
+  @@unique([tenantId, document])
+  @@index([tenantId])
+  @@index([createdByUserId])
+  @@index([name])
+  @@index([status])
+}

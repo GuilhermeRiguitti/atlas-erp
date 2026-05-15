@@ -4,7 +4,7 @@ import { Injectable } from '@nestjs/common';
 export class AppService {
   getHealth() {
     return {
-      name: 'Atlas Users API',
+      name: 'ERP Fiscal API',
       status: 'ok',
       timestamp: new Date().toISOString(),
     };

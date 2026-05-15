@@ -30,8 +30,9 @@ services:
       DATABASE_URL: mysql://atlas:atlas_password@mysql:3306/atlas_users
       PORT: 3333
       WEB_ORIGIN: http://localhost:3000
+      ONBOARDING_JWT_SECRET: local_onboarding_jwt_secret_change_me_32_chars
+      FISCAL_CREDENTIALS_ENCRYPTION_KEY: local_fiscal_credentials_key_change_me_32_chars
       NFEIO_BASE_URL: https://api.nfe.io
-      NFEIO_INVOICE_KEY: ""
     ports:
       - "3333:3333"
     depends_on:
