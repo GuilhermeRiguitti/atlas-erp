@@ -11,8 +11,8 @@ const loginSchema = yup.object({
 });
 
 export function LoginPanel() {
-  const [email, setEmail] = useState("admin@atlas.dev");
-  const [password, setPassword] = useState("portfolio123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -39,7 +39,7 @@ export function LoginPanel() {
             <LockKeyhole className="size-5" />
           </div>
           <div>
-            <p className="text-sm font-medium uppercase tracking-[0.16em] text-[#607568]">Atlas Users</p>
+            <p className="text-sm font-medium uppercase tracking-[0.16em] text-[#607568]">ERP Fiscal</p>
             <h1 className="text-xl font-semibold">Entrar no painel</h1>
           </div>
         </div>
@@ -66,7 +66,6 @@ export function LoginPanel() {
           <LogIn className="size-4" />
           Entrar
         </button>
-        <p className="mt-4 text-sm text-[#607568]">Seed: admin@atlas.dev / portfolio123</p>
       </form>
     </main>
   );

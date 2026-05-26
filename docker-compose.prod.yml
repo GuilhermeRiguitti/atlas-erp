@@ -1,0 +1,96 @@
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-atlas_users}
+      MYSQL_USER: ${MYSQL_USER:?MYSQL_USER is required}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+    command: --log-bin-trust-function-creators=1
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h 127.0.0.1 -u$${MYSQL_USER} -p$${MYSQL_PASSWORD} --silent",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      target: api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      PORT: 3333
+      WEB_ORIGIN: ${WEB_ORIGIN:?WEB_ORIGIN is required}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:?INTERNAL_API_KEY is required}
+      ONBOARDING_JWT_SECRET: ${ONBOARDING_JWT_SECRET:?ONBOARDING_JWT_SECRET is required}
+      FISCAL_CREDENTIALS_ENCRYPTION_KEY: ${FISCAL_CREDENTIALS_ENCRYPTION_KEY:?FISCAL_CREDENTIALS_ENCRYPTION_KEY is required}
+      NFEIO_BASE_URL: ${NFEIO_BASE_URL:-https://api.nfe.io}
+      ALLOW_MOCK_FISCAL_PROVIDER: "false"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      FISCAL_QUEUE_ATTEMPTS: ${FISCAL_QUEUE_ATTEMPTS:-5}
+      FISCAL_QUEUE_BACKOFF_MS: ${FISCAL_QUEUE_BACKOFF_MS:-30000}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      target: api
+    restart: unless-stopped
+    command: pnpm --filter api worker:prod
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:?INTERNAL_API_KEY is required}
+      ONBOARDING_JWT_SECRET: ${ONBOARDING_JWT_SECRET:?ONBOARDING_JWT_SECRET is required}
+      FISCAL_CREDENTIALS_ENCRYPTION_KEY: ${FISCAL_CREDENTIALS_ENCRYPTION_KEY:?FISCAL_CREDENTIALS_ENCRYPTION_KEY is required}
+      NFEIO_BASE_URL: ${NFEIO_BASE_URL:-https://api.nfe.io}
+      ALLOW_MOCK_FISCAL_PROVIDER: "false"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      FISCAL_QUEUE_ATTEMPTS: ${FISCAL_QUEUE_ATTEMPTS:-5}
+      FISCAL_QUEUE_BACKOFF_MS: ${FISCAL_QUEUE_BACKOFF_MS:-30000}
+      FISCAL_QUEUE_CONCURRENCY: ${FISCAL_QUEUE_CONCURRENCY:-2}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      target: web
+    restart: unless-stopped
+    environment:
+      API_URL: http://api:3333
+      API_INTERNAL_KEY: ${INTERNAL_API_KEY:?INTERNAL_API_KEY is required}
+      NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-ERP Fiscal}
+      IRON_SESSION_PASSWORD: ${IRON_SESSION_PASSWORD:?IRON_SESSION_PASSWORD is required}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      - api
+
+volumes:
+  mysql_data:

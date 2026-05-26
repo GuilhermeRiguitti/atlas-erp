@@ -20,7 +20,7 @@ COPY --from=builder /app ./
 
 FROM runner AS api
 EXPOSE 3333
-CMD ["sh", "-c", "pnpm --filter api prisma:migrate:deploy && pnpm --filter api prisma:seed && pnpm --filter api start:prod"]
+CMD ["sh", "-c", "pnpm --filter api prisma:migrate:deploy && pnpm --filter api start:prod"]
 
 FROM runner AS web
 EXPOSE 3000

@@ -2,12 +2,14 @@
   "name": "atlas-users-suite",
   "version": "0.1.0",
   "private": true,
-  "description": "Portfolio monorepo with a NestJS API, Next.js dashboard, Prisma ORM and iron-session authentication.",
+  "description": "Multi-tenant fiscal ERP SaaS with NestJS, Next.js, Prisma, MySQL and iron-session authentication.",
   "packageManager": "pnpm@11.1.1",
   "scripts": {
-    "dev": "pnpm --parallel --filter api --filter web dev",
+    "dev": "concurrently -n api,web,worker -c blue,green,magenta \"pnpm dev:api\" \"pnpm dev:web\" \"pnpm dev:worker\"",
+    "dev:no-worker": "pnpm --parallel --filter api --filter web dev",
     "dev:api": "pnpm --filter api start:dev",
     "dev:web": "pnpm --filter web dev",
+    "dev:worker": "pnpm --filter api worker:dev",
     "build": "pnpm -r build",
     "build:api": "pnpm --filter api build",
     "build:web": "pnpm --filter web build",
@@ -22,11 +24,13 @@
     "db:seed": "pnpm --filter api prisma:seed",
     "db:studio": "pnpm --filter api prisma:studio",
     "onboarding:token": "pnpm --filter api onboarding:token",
+    "docker:infra": "docker compose up -d mysql redis",
     "docker:up": "docker compose up --build",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f"
   },
   "devDependencies": {
+    "concurrently": "^9.2.1",
     "prettier": "^3.7.4"
   },
   "pnpm": {
@@ -37,6 +41,9 @@
       "prisma",
       "sharp",
       "unrs-resolver"
+    ],
+    "ignoredBuiltDependencies": [
+      "msgpackr-extract"
     ]
   }
 }

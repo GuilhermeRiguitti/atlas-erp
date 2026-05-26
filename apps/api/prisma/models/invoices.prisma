@@ -5,10 +5,25 @@ enum FiscalProvider {
 
 enum ServiceInvoiceStatus {
   DRAFT
+  QUEUED
   PROCESSING
   AUTHORIZED
   REJECTED
+  FAILED_RETRYING
+  FAILED_FINAL
   CANCELLED
+}
+
+enum FiscalAuditEventType {
+  INVOICE_ISSUE_QUEUED
+  INVOICE_ISSUE_STARTED
+  INVOICE_ISSUE_PROCESSING
+  INVOICE_ISSUE_AUTHORIZED
+  INVOICE_ISSUE_REJECTED
+  INVOICE_ISSUE_FAILED
+  INVOICE_CANCELLED
+  FISCAL_CREDENTIAL_UPDATED
+  FISCAL_CREDENTIAL_DISABLED
 }
 
 model ServiceInvoice {
@@ -40,15 +55,40 @@ model ServiceInvoice {
   notes                String?              @db.Text
   providerPayload      Json?
   providerResponse     Json?
+  processingAttempts   Int                  @default(0)
+  lastAttemptAt        DateTime?
+  lastFailureReason    String?              @db.Text
+  queuedAt             DateTime?
   issuedAt             DateTime?
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
   tenant               Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   client               Client?              @relation(fields: [clientId], references: [id], onDelete: SetNull)
   issuedBy             User?                @relation("IssuedServiceInvoices", fields: [issuedByUserId], references: [id], onDelete: SetNull)
+  auditEvents          FiscalAuditEvent[]
 
   @@index([tenantId])
   @@index([clientId])
   @@index([status])
   @@index([providerExternalId])
+}
+
+model FiscalAuditEvent {
+  id               String               @id @default(cuid())
+  tenantId         String
+  serviceInvoiceId String?
+  actorUserId      String?
+  type             FiscalAuditEventType
+  message          String?              @db.Text
+  metadata         Json?
+  createdAt        DateTime             @default(now())
+  tenant           Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  serviceInvoice   ServiceInvoice?      @relation(fields: [serviceInvoiceId], references: [id], onDelete: SetNull)
+  actor            User?                @relation("FiscalAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([serviceInvoiceId])
+  @@index([actorUserId])
+  @@index([type])
+  @@index([createdAt])
 }

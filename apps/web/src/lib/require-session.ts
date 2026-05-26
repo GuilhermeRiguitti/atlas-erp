@@ -1,10 +1,11 @@
 import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { sessionOptions } from "./session";
+import { assertSessionConfig, sessionOptions } from "./session";
 import type { SessionData } from "./types";
 
 export async function getSession() {
+  assertSessionConfig();
   return getIronSession<SessionData>(await cookies(), sessionOptions);
 }
 

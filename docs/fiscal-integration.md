@@ -1,8 +1,8 @@
-# Integração fiscal de NFS-e
+# Integracao fiscal de NFS-e
 
-## Decisão técnica
+## Decisao tecnica
 
-A emissão de nota fiscal de serviço foi desenhada com adapter de provider. Hoje existem dois caminhos:
+A emissao de nota fiscal de servico foi desenhada com adapter de provider. Hoje existem dois caminhos:
 
 - `MOCK`: provider local para desenvolvimento e testes sem envio real.
 - `NFE_IO`: adapter inicial para NFE.io, configurado por credenciais criptografadas por tenant.
@@ -11,9 +11,9 @@ Essa separacao evita acoplar o ERP a um fornecedor fiscal antes de validar munic
 
 ## Provedores avaliados
 
-NFE.io possui documentacao REST para Nota Fiscal de Serviço e recursos ligados a empresas, tomadores, notas e webhooks. Fonte: [documentacao NFE.io NFS-e](https://nfe.io/docs/desenvolvedores/rest-api/nota-fiscal-de-servico-v1/).
+NFE.io possui documentacao REST para Nota Fiscal de Servico e recursos ligados a empresas, tomadores, notas e webhooks. Fonte: [documentacao NFE.io NFS-e](https://nfe.io/docs/desenvolvedores/rest-api/nota-fiscal-de-servico-v1/).
 
-Focus NFe tambem e um provider conhecido no Brasil. A documentacao da API v2 informa suporte a NFe, NFSe e NFCe, com comunicacao com SEFAZ ou prefeituras. A emissao de NFSe e assíncrona: a nota aceita entra em fila e depois deve ser consultada ou acompanhada por webhook. Fontes: [docs Focus NFe](https://focusnfe.com.br/doc/) e [emitir NFSe](https://doc.focusnfe.com.br/reference/emitir_nfse).
+Focus NFe tambem e um provider conhecido no Brasil. A documentacao da API v2 informa suporte a NFe, NFSe e NFCe, com comunicacao com SEFAZ ou prefeituras. A emissao de NFSe costuma depender de processamento assincrono: a nota aceita entra em fila e depois deve ser consultada ou acompanhada por webhook. Fontes: [docs Focus NFe](https://focusnfe.com.br/doc/) e [emitir NFSe](https://doc.focusnfe.com.br/reference/emitir_nfse).
 
 ## Fluxo recomendado
 
@@ -23,18 +23,38 @@ Focus NFe tambem e um provider conhecido no Brasil. A documentacao da API v2 inf
 4. Configurar provider fiscal e credenciais criptografadas no tenant.
 5. Criar nota em `ServiceInvoice`, preferencialmente com `clientId`.
 6. Preencher dados do tomador a partir do cliente selecionado.
-7. Enviar payload ao provider.
-8. Salvar `providerPayload` e `providerResponse`.
-9. Atualizar status por consulta ou webhook.
-10. Disponibilizar XML/PDF/URL quando autorizado pelo provider.
+7. Salvar a nota como `QUEUED` e publicar o job `issue-service-invoice` no BullMQ.
+8. Worker fiscal consome o job, envia payload ao provider e aplica retry/backoff em falhas temporarias.
+9. Salvar `providerPayload`, `providerResponse` e `FiscalAuditEvent`.
+10. Atualizar status por resposta imediata, consulta ou webhook.
+11. Disponibilizar XML/PDF/URL quando autorizado pelo provider.
 
 ## Status internos
 
 - `DRAFT`: criado sem envio.
+- `QUEUED`: salvo e aguardando processamento pelo worker fiscal.
 - `PROCESSING`: aceito pelo provider e aguardando prefeitura.
 - `AUTHORIZED`: autorizado.
 - `REJECTED`: rejeitado pelo provider ou prefeitura.
+- `FAILED_RETRYING`: falha temporaria; BullMQ ainda pode tentar novamente.
+- `FAILED_FINAL`: falha apos todas as tentativas configuradas.
 - `CANCELLED`: cancelado.
+
+## Fila e worker
+
+A emissao fiscal roda em background com Redis/BullMQ. A API salva a solicitacao no MySQL antes de publicar o job, e o worker recupera notas pendentes ao iniciar para reduzir risco operacional quando Redis ou worker forem reiniciados.
+
+Variaveis principais:
+
+```env
+REDIS_HOST="localhost"
+REDIS_PORT=6379
+FISCAL_QUEUE_ATTEMPTS=5
+FISCAL_QUEUE_BACKOFF_MS=30000
+FISCAL_QUEUE_CONCURRENCY=2
+```
+
+O MySQL continua sendo a fonte da verdade. Redis e a fila operacional: retries, backoff e concorrencia ficam no BullMQ; status fiscal, payloads e auditoria ficam no banco.
 
 ## Configuracao segura
 
@@ -64,7 +84,7 @@ O adapter da NFE.io ja usa a credencial ativa do tenant durante a emissao. A int
 - Webhook de retorno do provider.
 - Cancelamento/substituicao de NFS-e.
 - Download seguro de XML/PDF.
-- Auditoria de emissao por usuario e IP.
+- Expandir auditoria com IP, user-agent e rastreio de alteracao de credenciais fiscais.
 - RBAC por tenant.
 - Validacao de CNPJ/CPF com digito verificador.
 - Cofre externo ou KMS para substituir a chave-mestre local quando o sistema for para producao.

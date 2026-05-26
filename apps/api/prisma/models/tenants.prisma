@@ -24,18 +24,18 @@ enum TenantFiscalCredentialStatus {
 }
 
 model Tenant {
-  id                      String            @id @default(cuid())
+  id                      String                   @id @default(cuid())
   legalName               String
   tradeName               String?
-  cnpj                    String            @unique
-  status                  TenantStatus      @default(ONBOARDING)
-  taxRegime               TenantTaxRegime   @default(SIMPLES_NACIONAL)
+  cnpj                    String                   @unique
+  status                  TenantStatus             @default(ONBOARDING)
+  taxRegime               TenantTaxRegime          @default(SIMPLES_NACIONAL)
   municipalRegistration   String?
   stateRegistration       String?
   cnae                    String?
   serviceTaxCode          String?
   municipalServiceCode    String?
-  fiscalProvider          FiscalProvider    @default(MOCK)
+  fiscalProvider          FiscalProvider           @default(MOCK)
   fiscalProviderCompanyId String?
   contactEmail            String
   contactPhone            String?
@@ -47,12 +47,13 @@ model Tenant {
   addressState            String
   addressCityIbgeCode     String
   addressZipCode          String
-  createdAt               DateTime          @default(now())
-  updatedAt               DateTime          @updatedAt
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
   titulares               TenantTitular[]
   fiscalCredentials       TenantFiscalCredential[]
   clients                 Client[]
   serviceInvoices         ServiceInvoice[]
+  fiscalAuditEvents       FiscalAuditEvent[]
 
   @@index([legalName])
   @@index([status])

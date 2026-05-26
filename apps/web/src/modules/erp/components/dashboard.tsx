@@ -22,6 +22,7 @@ import type {
   ClientType,
   FiscalProvider,
   ServiceInvoice,
+  ServiceInvoiceStatus,
   SessionUser,
   Tenant,
   TenantFiscalCredential,
@@ -33,7 +34,14 @@ import type {
   UserRole,
   UserStatus,
 } from "@/lib/types";
-import { clientSchema, fiscalCredentialSchema, invoiceSchema, tenantSchema, userSchema, validateForm } from "@/modules/erp/validation/schemas";
+import {
+  clientSchema,
+  fiscalCredentialSchema,
+  invoiceSchema,
+  tenantSchema,
+  userSchema,
+  validateForm,
+} from "@/modules/erp/validation/schemas";
 import { apiClient } from "@/shared/api/http-client";
 import { queryKeys } from "@/shared/api/query-keys";
 
@@ -46,12 +54,40 @@ type Tab = "tenants" | "clients" | "invoices" | "users";
 const roles: UserRole[] = ["ADMIN", "MEMBER", "RECRUITER"];
 const statuses: UserStatus[] = ["ACTIVE", "INVITED", "SUSPENDED"];
 const tenantStatuses: TenantStatus[] = ["ACTIVE", "ONBOARDING", "SUSPENDED"];
-const taxRegimes: TenantTaxRegime[] = ["SIMPLES_NACIONAL", "LUCRO_PRESUMIDO", "LUCRO_REAL", "MEI"];
+const taxRegimes: TenantTaxRegime[] = [
+  "SIMPLES_NACIONAL",
+  "LUCRO_PRESUMIDO",
+  "LUCRO_REAL",
+  "MEI",
+];
 const fiscalProviders: FiscalProvider[] = ["MOCK", "NFE_IO"];
-const fiscalCredentialStatuses: TenantFiscalCredentialStatus[] = ["ACTIVE", "DISABLED"];
-const titularRoles: TenantTitularRole[] = ["OWNER", "PARTNER", "ACCOUNTANT", "FINANCIAL_MANAGER"];
+const fiscalCredentialStatuses: TenantFiscalCredentialStatus[] = [
+  "ACTIVE",
+  "DISABLED",
+];
+const titularRoles: TenantTitularRole[] = [
+  "OWNER",
+  "PARTNER",
+  "ACCOUNTANT",
+  "FINANCIAL_MANAGER",
+];
 const clientTypes: ClientType[] = ["COMPANY", "INDIVIDUAL"];
 const clientStatuses: ClientStatus[] = ["ACTIVE", "INACTIVE"];
+const activeInvoiceStatuses = new Set<ServiceInvoiceStatus>([
+  "QUEUED",
+  "PROCESSING",
+  "FAILED_RETRYING",
+]);
+const invoiceStatusLabels: Record<ServiceInvoiceStatus, string> = {
+  DRAFT: "Rascunho",
+  QUEUED: "Na fila",
+  PROCESSING: "Processando",
+  AUTHORIZED: "Autorizada",
+  REJECTED: "Rejeitada",
+  FAILED_RETRYING: "Tentando novamente",
+  FAILED_FINAL: "Falha final",
+  CANCELLED: "Cancelada",
+};
 
 const emptyUser = {
   name: "",
@@ -140,24 +176,39 @@ export function Dashboard({ sessionUser }: DashboardProps) {
   const [query, setQuery] = useState("");
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(sessionUser.id);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(
+    sessionUser.id,
+  );
   const [tenantForm, setTenantForm] = useState(emptyTenant);
-  const [tenantFormTenantId, setTenantFormTenantId] = useState<string | null>(null);
+  const [tenantFormTenantId, setTenantFormTenantId] = useState<string | null>(
+    null,
+  );
   const [newUserForm, setNewUserForm] = useState(emptyUser);
   const [editUserForm, setEditUserForm] = useState(emptyUser);
-  const [editUserFormUserId, setEditUserFormUserId] = useState<string | null>(null);
+  const [editUserFormUserId, setEditUserFormUserId] = useState<string | null>(
+    null,
+  );
   const [clientForm, setClientForm] = useState(emptyClient);
-  const [clientFormClientId, setClientFormClientId] = useState<string | null>(null);
+  const [clientFormClientId, setClientFormClientId] = useState<string | null>(
+    null,
+  );
   const [invoiceForm, setInvoiceForm] = useState(emptyInvoice);
-  const [fiscalCredentialForm, setFiscalCredentialForm] = useState(emptyFiscalCredential);
-  const [fiscalCredentialFormTenantId, setFiscalCredentialFormTenantId] = useState<string | null>(null);
+  const [fiscalCredentialForm, setFiscalCredentialForm] = useState(
+    emptyFiscalCredential,
+  );
+  const [fiscalCredentialFormTenantId, setFiscalCredentialFormTenantId] =
+    useState<string | null>(null);
   const [titularUserId, setTitularUserId] = useState("");
   const [titularRole, setTitularRole] = useState<TenantTitularRole>("OWNER");
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  const tenantsUrl = query.trim() ? `/api/tenants?q=${encodeURIComponent(query.trim())}` : "/api/tenants";
-  const usersUrl = query.trim() ? `/api/users?q=${encodeURIComponent(query.trim())}` : "/api/users";
+  const tenantsUrl = query.trim()
+    ? `/api/tenants?q=${encodeURIComponent(query.trim())}`
+    : "/api/tenants";
+  const usersUrl = query.trim()
+    ? `/api/users?q=${encodeURIComponent(query.trim())}`
+    : "/api/users";
   const { data: tenants = [], isLoading: tenantsLoading } = useQuery({
     queryKey: queryKeys.tenants(query),
     queryFn: () => apiClient.get<Tenant[]>(tenantsUrl),
@@ -184,29 +235,52 @@ export function Dashboard({ sessionUser }: DashboardProps) {
     [selectedClientId, clients],
   );
   const selectedTenantForm =
-    selectedTenant && tenantFormTenantId !== selectedTenant.id ? tenantToForm(selectedTenant) : tenantForm;
+    selectedTenant && tenantFormTenantId !== selectedTenant.id
+      ? tenantToForm(selectedTenant)
+      : tenantForm;
   const selectedClientForm =
-    selectedClient && clientFormClientId !== selectedClient.id ? clientToForm(selectedClient) : clientForm;
+    selectedClient && clientFormClientId !== selectedClient.id
+      ? clientToForm(selectedClient)
+      : clientForm;
   const selectedEditUserForm =
-    selectedUser && editUserFormUserId !== selectedUser.id ? userToForm(selectedUser) : editUserForm;
+    selectedUser && editUserFormUserId !== selectedUser.id
+      ? userToForm(selectedUser)
+      : editUserForm;
   const selectedTitularUserId = titularUserId || users[0]?.id || "";
   const { data: fiscalCredentials = [] } = useQuery({
     enabled: Boolean(selectedTenant),
     queryKey: queryKeys.fiscalCredentials(selectedTenant?.id),
-    queryFn: () => apiClient.get<TenantFiscalCredential[]>(`/api/tenants/${selectedTenant?.id}/fiscal-credentials`),
+    queryFn: () =>
+      apiClient.get<TenantFiscalCredential[]>(
+        `/api/tenants/${selectedTenant?.id}/fiscal-credentials`,
+      ),
   });
   const selectedFiscalCredential = useMemo(
-    () => fiscalCredentials.find((credential) => credential.provider === fiscalCredentialForm.provider),
+    () =>
+      fiscalCredentials.find(
+        (credential) => credential.provider === fiscalCredentialForm.provider,
+      ),
     [fiscalCredentialForm.provider, fiscalCredentials],
   );
   const selectedFiscalCredentialForm =
     selectedTenant && fiscalCredentialFormTenantId !== selectedTenant.id
-      ? fiscalCredentialToForm(fiscalCredentials.find((credential) => credential.provider === "NFE_IO"), selectedTenant)
+      ? fiscalCredentialToForm(
+          fiscalCredentials.find(
+            (credential) => credential.provider === "NFE_IO",
+          ),
+          selectedTenant,
+        )
       : fiscalCredentialForm;
-  const invoicesUrl = selectedTenant ? `/api/service-invoices?tenantId=${selectedTenant.id}` : "/api/service-invoices";
+  const invoicesUrl = selectedTenant
+    ? `/api/service-invoices?tenantId=${selectedTenant.id}`
+    : "/api/service-invoices";
   const { data: invoices = [] } = useQuery({
     queryKey: queryKeys.invoices(selectedTenant?.id),
     queryFn: () => apiClient.get<ServiceInvoice[]>(invoicesUrl),
+    refetchInterval: (query) =>
+      hasActiveInvoiceJobs(query.state.data as ServiceInvoice[] | undefined)
+        ? 5000
+        : false,
   });
 
   async function logout() {
@@ -229,14 +303,20 @@ export function Dashboard({ sessionUser }: DashboardProps) {
   async function updateTenant(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedTenant) return;
-    const validationError = await validateForm(tenantSchema, selectedTenantForm);
+    const validationError = await validateForm(
+      tenantSchema,
+      selectedTenantForm,
+    );
     if (validationError) {
       setError(validationError);
       return;
     }
 
     await run(async () => {
-      await apiClient.patch<Tenant>(`/api/tenants/${selectedTenant.id}`, cleanTenantPayload(selectedTenantForm));
+      await apiClient.patch<Tenant>(
+        `/api/tenants/${selectedTenant.id}`,
+        cleanTenantPayload(selectedTenantForm),
+      );
       await invalidateTenantData();
     });
   }
@@ -258,14 +338,20 @@ export function Dashboard({ sessionUser }: DashboardProps) {
   async function saveFiscalCredential(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedTenant) return;
-    const validationError = await validateForm(fiscalCredentialSchema, selectedFiscalCredentialForm);
+    const validationError = await validateForm(
+      fiscalCredentialSchema,
+      selectedFiscalCredentialForm,
+    );
     if (validationError) {
       setError(validationError);
       return;
     }
 
     await run(async () => {
-      await apiClient.put(`/api/tenants/${selectedTenant.id}/fiscal-credentials`, cleanFiscalCredentialPayload(selectedFiscalCredentialForm));
+      await apiClient.put(
+        `/api/tenants/${selectedTenant.id}/fiscal-credentials`,
+        cleanFiscalCredentialPayload(selectedFiscalCredentialForm),
+      );
       setFiscalCredentialForm((current) => ({ ...current, apiKey: "" }));
       setFiscalCredentialFormTenantId(selectedTenant.id);
       await invalidateFiscalCredentialData(selectedTenant.id);
@@ -276,7 +362,9 @@ export function Dashboard({ sessionUser }: DashboardProps) {
     if (!selectedTenant) return;
 
     await run(async () => {
-      await apiClient.delete(`/api/tenants/${selectedTenant.id}/titulares/${titularId}`);
+      await apiClient.delete(
+        `/api/tenants/${selectedTenant.id}/titulares/${titularId}`,
+      );
       await invalidateTenantData();
     });
   }
@@ -284,7 +372,10 @@ export function Dashboard({ sessionUser }: DashboardProps) {
   async function createClient(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedTenant) return;
-    const validationError = await validateForm(clientSchema, selectedClientForm);
+    const validationError = await validateForm(
+      clientSchema,
+      selectedClientForm,
+    );
     if (validationError) {
       setError(validationError);
       return;
@@ -304,14 +395,20 @@ export function Dashboard({ sessionUser }: DashboardProps) {
   async function updateClient(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedClient) return;
-    const validationError = await validateForm(clientSchema, selectedClientForm);
+    const validationError = await validateForm(
+      clientSchema,
+      selectedClientForm,
+    );
     if (validationError) {
       setError(validationError);
       return;
     }
 
     await run(async () => {
-      await apiClient.patch<Client>(`/api/clients/${selectedClient.id}`, cleanClientPayload(selectedClientForm));
+      await apiClient.patch<Client>(
+        `/api/clients/${selectedClient.id}`,
+        cleanClientPayload(selectedClientForm),
+      );
       await invalidateClientData(selectedClient.tenantId);
     });
   }
@@ -435,7 +532,9 @@ export function Dashboard({ sessionUser }: DashboardProps) {
   async function invalidateFiscalCredentialData(tenantId?: string) {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["fiscal-credentials"] }),
-      queryClient.invalidateQueries({ queryKey: queryKeys.fiscalCredentials(tenantId) }),
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.fiscalCredentials(tenantId),
+      }),
       queryClient.invalidateQueries({ queryKey: ["tenants"] }),
     ]);
   }
@@ -443,7 +542,9 @@ export function Dashboard({ sessionUser }: DashboardProps) {
   async function invalidateClientData(tenantId?: string) {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["clients"] }),
-      queryClient.invalidateQueries({ queryKey: queryKeys.clients(tenantId, query) }),
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.clients(tenantId, query),
+      }),
     ]);
   }
 
@@ -464,15 +565,23 @@ export function Dashboard({ sessionUser }: DashboardProps) {
       <header className="border-b border-[#d9ded6] bg-white">
         <div className="mx-auto flex max-w-7xl flex-col gap-5 px-5 py-5 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-sm font-medium uppercase tracking-[0.16em] text-[#607568]">ERP Fiscal</p>
-            <h1 className="mt-1 text-2xl font-semibold">Empresas, titulares e NFS-e</h1>
+            <p className="text-sm font-medium uppercase tracking-[0.16em] text-[#607568]">
+              ERP Fiscal
+            </p>
+            <h1 className="mt-1 text-2xl font-semibold">
+              Empresas, titulares e NFS-e
+            </h1>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <span className="inline-flex items-center gap-2 rounded-md border border-[#d9ded6] bg-[#f7f7f4] px-3 py-2 text-sm">
               <BadgeCheck className="size-4 text-[#28785d]" />
               {sessionUser.name}
             </span>
-            <button className="inline-flex h-10 items-center gap-2 rounded-md bg-[#1d2520] px-4 text-sm font-medium text-white" onClick={logout} type="button">
+            <button
+              className="inline-flex h-10 items-center gap-2 rounded-md bg-[#1d2520] px-4 text-sm font-medium text-white"
+              onClick={logout}
+              type="button"
+            >
               <LogOut className="size-4" />
               Sair
             </button>
@@ -482,29 +591,73 @@ export function Dashboard({ sessionUser }: DashboardProps) {
 
       <div className="mx-auto max-w-7xl px-5 py-6">
         <nav className="mb-6 flex flex-wrap gap-2">
-          <TabButton active={activeTab === "tenants"} icon={<Building2 className="size-4" />} label="Empresas" onClick={() => setActiveTab("tenants")} />
-          <TabButton active={activeTab === "clients"} icon={<UsersRound className="size-4" />} label="Clientes" onClick={() => setActiveTab("clients")} />
-          <TabButton active={activeTab === "invoices"} icon={<ReceiptText className="size-4" />} label="Notas fiscais" onClick={() => setActiveTab("invoices")} />
-          <TabButton active={activeTab === "users"} icon={<UserRoundCog className="size-4" />} label="Usuarios" onClick={() => setActiveTab("users")} />
+          <TabButton
+            active={activeTab === "tenants"}
+            icon={<Building2 className="size-4" />}
+            label="Empresas"
+            onClick={() => setActiveTab("tenants")}
+          />
+          <TabButton
+            active={activeTab === "clients"}
+            icon={<UsersRound className="size-4" />}
+            label="Clientes"
+            onClick={() => setActiveTab("clients")}
+          />
+          <TabButton
+            active={activeTab === "invoices"}
+            icon={<ReceiptText className="size-4" />}
+            label="Notas fiscais"
+            onClick={() => setActiveTab("invoices")}
+          />
+          <TabButton
+            active={activeTab === "users"}
+            icon={<UserRoundCog className="size-4" />}
+            label="Usuarios"
+            onClick={() => setActiveTab("users")}
+          />
         </nav>
 
-        {error ? <div className="mb-5 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
+        {error ? (
+          <div className="mb-5 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        ) : null}
 
         {activeTab === "tenants" ? (
           <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
             <aside className="space-y-4">
-              <SearchBox query={query} setQuery={setQuery} placeholder="Buscar por razao social ou CNPJ" />
-              {tenantsLoading ? <p className="text-sm text-[#607568]">Carregando empresas...</p> : null}
+              <SearchBox
+                query={query}
+                setQuery={setQuery}
+                placeholder="Buscar por razao social ou CNPJ"
+              />
+              {tenantsLoading ? (
+                <p className="text-sm text-[#607568]">Carregando empresas...</p>
+              ) : null}
               {tenants.map((tenant) => (
-                <button className="w-full rounded-md border border-[#d9ded6] bg-white p-4 text-left shadow-sm transition hover:border-[#8ca895]" key={tenant.id} onClick={() => setSelectedTenantId(tenant.id)} type="button">
+                <button
+                  className="w-full rounded-md border border-[#d9ded6] bg-white p-4 text-left shadow-sm transition hover:border-[#8ca895]"
+                  key={tenant.id}
+                  onClick={() => setSelectedTenantId(tenant.id)}
+                  type="button"
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-semibold">{tenant.tradeName || tenant.legalName}</p>
-                      <p className="mt-1 text-sm text-[#607568]">{formatCnpj(tenant.cnpj)}</p>
+                      <p className="font-semibold">
+                        {tenant.tradeName || tenant.legalName}
+                      </p>
+                      <p className="mt-1 text-sm text-[#607568]">
+                        {formatCnpj(tenant.cnpj)}
+                      </p>
                     </div>
-                    <span className="rounded-md bg-[#e6f0e9] px-2 py-1 text-xs font-medium text-[#28785d]">{tenant.status}</span>
+                    <span className="rounded-md bg-[#e6f0e9] px-2 py-1 text-xs font-medium text-[#28785d]">
+                      {tenant.status}
+                    </span>
                   </div>
-                  <p className="mt-3 text-sm text-[#4d5b52]">{tenant.addressCity}/{tenant.addressState} · {tenant.taxRegime}</p>
+                  <p className="mt-3 text-sm text-[#4d5b52]">
+                    {tenant.addressCity}/{tenant.addressState} ·{" "}
+                    {tenant.taxRegime}
+                  </p>
                 </button>
               ))}
             </aside>
@@ -512,9 +665,35 @@ export function Dashboard({ sessionUser }: DashboardProps) {
             <section className="space-y-6">
               {selectedTenant ? (
                 <>
-                  <TenantForm form={selectedTenantForm} isSaving={isSaving} onChange={(form) => { setTenantForm(form); setTenantFormTenantId(selectedTenant.id); }} onUpdate={updateTenant} />
-                  <FiscalCredentialsPanel credential={selectedFiscalCredential} form={selectedFiscalCredentialForm} isSaving={isSaving} onChange={(form) => { setFiscalCredentialForm(form); setFiscalCredentialFormTenantId(selectedTenant.id); }} onSubmit={saveFiscalCredential} />
-                  <TitularesPanel addTitular={addTitular} removeTitular={removeTitular} selectedTenant={selectedTenant} setTitularRole={setTitularRole} setTitularUserId={setTitularUserId} titularRole={titularRole} titularUserId={selectedTitularUserId} users={users} />
+                  <TenantForm
+                    form={selectedTenantForm}
+                    isSaving={isSaving}
+                    onChange={(form) => {
+                      setTenantForm(form);
+                      setTenantFormTenantId(selectedTenant.id);
+                    }}
+                    onUpdate={updateTenant}
+                  />
+                  <FiscalCredentialsPanel
+                    credential={selectedFiscalCredential}
+                    form={selectedFiscalCredentialForm}
+                    isSaving={isSaving}
+                    onChange={(form) => {
+                      setFiscalCredentialForm(form);
+                      setFiscalCredentialFormTenantId(selectedTenant.id);
+                    }}
+                    onSubmit={saveFiscalCredential}
+                  />
+                  <TitularesPanel
+                    addTitular={addTitular}
+                    removeTitular={removeTitular}
+                    selectedTenant={selectedTenant}
+                    setTitularRole={setTitularRole}
+                    setTitularUserId={setTitularUserId}
+                    titularRole={titularRole}
+                    titularUserId={selectedTitularUserId}
+                    users={users}
+                  />
                 </>
               ) : (
                 <TenantEmptyState />
@@ -548,12 +727,40 @@ export function Dashboard({ sessionUser }: DashboardProps) {
         {activeTab === "invoices" ? (
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
             <InvoiceHistory invoices={invoices} tenants={tenants} />
-            <InvoiceForm clients={clients} form={invoiceForm} isSaving={isSaving} onChange={setInvoiceForm} onClientSelect={selectClientForInvoice} onSubmit={issueInvoice} selectedTenant={selectedTenant} setSelectedTenantId={(id) => { setSelectedTenantId(id); setInvoiceForm((current) => ({ ...current, clientId: "" })); }} tenants={tenants} />
+            <InvoiceForm
+              clients={clients}
+              form={invoiceForm}
+              isSaving={isSaving}
+              onChange={setInvoiceForm}
+              onClientSelect={selectClientForInvoice}
+              onSubmit={issueInvoice}
+              selectedTenant={selectedTenant}
+              setSelectedTenantId={(id) => {
+                setSelectedTenantId(id);
+                setInvoiceForm((current) => ({ ...current, clientId: "" }));
+              }}
+              tenants={tenants}
+            />
           </div>
         ) : null}
 
         {activeTab === "users" ? (
-          <UsersPanel createUser={createUser} deleteUser={deleteUser} editUserForm={selectedEditUserForm} isSaving={isSaving} newUserForm={newUserForm} selectedUser={selectedUser} setEditUserForm={(form) => { setEditUserForm(form); setEditUserFormUserId(selectedUser?.id ?? null); }} setNewUserForm={setNewUserForm} setSelectedUserId={setSelectedUserId} updateSelectedUser={updateSelectedUser} users={users} />
+          <UsersPanel
+            createUser={createUser}
+            deleteUser={deleteUser}
+            editUserForm={selectedEditUserForm}
+            isSaving={isSaving}
+            newUserForm={newUserForm}
+            selectedUser={selectedUser}
+            setEditUserForm={(form) => {
+              setEditUserForm(form);
+              setEditUserFormUserId(selectedUser?.id ?? null);
+            }}
+            setNewUserForm={setNewUserForm}
+            setSelectedUserId={setSelectedUserId}
+            updateSelectedUser={updateSelectedUser}
+            users={users}
+          />
         ) : null}
       </div>
     </main>
@@ -572,38 +779,154 @@ function TenantForm({
   onUpdate: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
-    <form className="rounded-md border border-[#d9ded6] bg-white p-5 shadow-sm" onSubmit={onUpdate}>
+    <form
+      className="rounded-md border border-[#d9ded6] bg-white p-5 shadow-sm"
+      onSubmit={onUpdate}
+    >
       <div className="mb-5 flex items-center gap-3">
         <Building2 className="size-5 text-[#28785d]" />
         <h2 className="text-lg font-semibold">Dados da empresa</h2>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
-        <Input label="Razao social" value={form.legalName} onChange={(legalName) => onChange({ ...form, legalName })} />
-        <Input label="Nome fantasia" value={form.tradeName} onChange={(tradeName) => onChange({ ...form, tradeName })} />
-        <Input label="CNPJ" value={form.cnpj} onChange={(cnpj) => onChange({ ...form, cnpj })} />
-        <Input label="Email fiscal" type="email" value={form.contactEmail} onChange={(contactEmail) => onChange({ ...form, contactEmail })} />
-        <Select label="Status" value={form.status} values={tenantStatuses} onChange={(status) => onChange({ ...form, status: status as TenantStatus })} />
-        <Select label="Regime tributario" value={form.taxRegime} values={taxRegimes} onChange={(taxRegime) => onChange({ ...form, taxRegime: taxRegime as TenantTaxRegime })} />
-        <Input label="Inscricao municipal" value={form.municipalRegistration} onChange={(municipalRegistration) => onChange({ ...form, municipalRegistration })} />
-        <Input label="CNAE" value={form.cnae} onChange={(cnae) => onChange({ ...form, cnae })} />
-        <Input label="Codigo servico LC 116" value={form.serviceTaxCode} onChange={(serviceTaxCode) => onChange({ ...form, serviceTaxCode })} />
-        <Input label="Codigo municipal" value={form.municipalServiceCode} onChange={(municipalServiceCode) => onChange({ ...form, municipalServiceCode })} />
-        <Select label="Provider fiscal" value={form.fiscalProvider} values={fiscalProviders} onChange={(fiscalProvider) => onChange({ ...form, fiscalProvider: fiscalProvider as FiscalProvider })} />
-        <Input label="ID empresa no provider" value={form.fiscalProviderCompanyId} onChange={(fiscalProviderCompanyId) => onChange({ ...form, fiscalProviderCompanyId })} />
+        <Input
+          label="Razao social"
+          value={form.legalName}
+          onChange={(legalName) => onChange({ ...form, legalName })}
+        />
+        <Input
+          label="Nome fantasia"
+          value={form.tradeName}
+          onChange={(tradeName) => onChange({ ...form, tradeName })}
+        />
+        <Input
+          label="CNPJ"
+          value={form.cnpj}
+          onChange={(cnpj) => onChange({ ...form, cnpj })}
+        />
+        <Input
+          label="Email fiscal"
+          type="email"
+          value={form.contactEmail}
+          onChange={(contactEmail) => onChange({ ...form, contactEmail })}
+        />
+        <Select
+          label="Status"
+          value={form.status}
+          values={tenantStatuses}
+          onChange={(status) =>
+            onChange({ ...form, status: status as TenantStatus })
+          }
+        />
+        <Select
+          label="Regime tributario"
+          value={form.taxRegime}
+          values={taxRegimes}
+          onChange={(taxRegime) =>
+            onChange({ ...form, taxRegime: taxRegime as TenantTaxRegime })
+          }
+        />
+        <Input
+          label="Inscricao municipal"
+          value={form.municipalRegistration}
+          onChange={(municipalRegistration) =>
+            onChange({ ...form, municipalRegistration })
+          }
+        />
+        <Input
+          label="CNAE"
+          value={form.cnae}
+          onChange={(cnae) => onChange({ ...form, cnae })}
+        />
+        <Input
+          label="Codigo servico LC 116"
+          value={form.serviceTaxCode}
+          onChange={(serviceTaxCode) => onChange({ ...form, serviceTaxCode })}
+        />
+        <Input
+          label="Codigo municipal"
+          value={form.municipalServiceCode}
+          onChange={(municipalServiceCode) =>
+            onChange({ ...form, municipalServiceCode })
+          }
+        />
+        <Select
+          label="Provider fiscal"
+          value={form.fiscalProvider}
+          values={fiscalProviders}
+          onChange={(fiscalProvider) =>
+            onChange({
+              ...form,
+              fiscalProvider: fiscalProvider as FiscalProvider,
+            })
+          }
+        />
+        <Input
+          label="ID empresa no provider"
+          value={form.fiscalProviderCompanyId}
+          onChange={(fiscalProviderCompanyId) =>
+            onChange({ ...form, fiscalProviderCompanyId })
+          }
+        />
       </div>
       <div className="mt-4 grid gap-4 md:grid-cols-3">
-        <Input label="Logradouro" value={form.addressStreet} onChange={(addressStreet) => onChange({ ...form, addressStreet })} />
-        <Input label="Numero" value={form.addressNumber} onChange={(addressNumber) => onChange({ ...form, addressNumber })} />
-        <Input label="CEP" value={form.addressZipCode} onChange={(addressZipCode) => onChange({ ...form, addressZipCode })} />
-        <Input label="Bairro" value={form.addressNeighborhood} onChange={(addressNeighborhood) => onChange({ ...form, addressNeighborhood })} />
-        <Input label="Cidade" value={form.addressCity} onChange={(addressCity) => onChange({ ...form, addressCity })} />
-        <Input label="UF" value={form.addressState} onChange={(addressState) => onChange({ ...form, addressState })} />
-        <Input label="Codigo IBGE cidade" value={form.addressCityIbgeCode} onChange={(addressCityIbgeCode) => onChange({ ...form, addressCityIbgeCode })} />
-        <Input label="Telefone" value={form.contactPhone} onChange={(contactPhone) => onChange({ ...form, contactPhone })} />
-        <Input label="Complemento" value={form.addressComplement} onChange={(addressComplement) => onChange({ ...form, addressComplement })} />
+        <Input
+          label="Logradouro"
+          value={form.addressStreet}
+          onChange={(addressStreet) => onChange({ ...form, addressStreet })}
+        />
+        <Input
+          label="Numero"
+          value={form.addressNumber}
+          onChange={(addressNumber) => onChange({ ...form, addressNumber })}
+        />
+        <Input
+          label="CEP"
+          value={form.addressZipCode}
+          onChange={(addressZipCode) => onChange({ ...form, addressZipCode })}
+        />
+        <Input
+          label="Bairro"
+          value={form.addressNeighborhood}
+          onChange={(addressNeighborhood) =>
+            onChange({ ...form, addressNeighborhood })
+          }
+        />
+        <Input
+          label="Cidade"
+          value={form.addressCity}
+          onChange={(addressCity) => onChange({ ...form, addressCity })}
+        />
+        <Input
+          label="UF"
+          value={form.addressState}
+          onChange={(addressState) => onChange({ ...form, addressState })}
+        />
+        <Input
+          label="Codigo IBGE cidade"
+          value={form.addressCityIbgeCode}
+          onChange={(addressCityIbgeCode) =>
+            onChange({ ...form, addressCityIbgeCode })
+          }
+        />
+        <Input
+          label="Telefone"
+          value={form.contactPhone}
+          onChange={(contactPhone) => onChange({ ...form, contactPhone })}
+        />
+        <Input
+          label="Complemento"
+          value={form.addressComplement}
+          onChange={(addressComplement) =>
+            onChange({ ...form, addressComplement })
+          }
+        />
       </div>
       <div className="mt-5 flex gap-3">
-        <button className="inline-flex h-10 items-center gap-2 rounded-md bg-[#28785d] px-4 text-sm font-medium text-white disabled:opacity-60" disabled={isSaving} type="submit">
+        <button
+          className="inline-flex h-10 items-center gap-2 rounded-md bg-[#28785d] px-4 text-sm font-medium text-white disabled:opacity-60"
+          disabled={isSaving}
+          type="submit"
+        >
           <Save className="size-4" />
           Salvar empresa
         </button>
@@ -626,18 +949,57 @@ function FiscalCredentialsPanel({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
-    <form className="rounded-md border border-[#d9ded6] bg-white p-5 shadow-sm" onSubmit={onSubmit}>
+    <form
+      className="rounded-md border border-[#d9ded6] bg-white p-5 shadow-sm"
+      onSubmit={onSubmit}
+    >
       <div className="mb-5 flex items-center gap-3">
         <KeyRound className="size-5 text-[#28785d]" />
         <h2 className="text-lg font-semibold">Credenciais fiscais</h2>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
-        <Select label="Provider" value={form.provider} values={fiscalProviders.filter((provider) => provider !== "MOCK")} onChange={(provider) => onChange({ ...form, provider: provider as FiscalProvider })} />
-        <Select label="Status" value={form.status} values={fiscalCredentialStatuses} onChange={(status) => onChange({ ...form, status: status as TenantFiscalCredentialStatus })} />
-        <Input label="ID empresa no provider" value={form.providerCompanyId} onChange={(providerCompanyId) => onChange({ ...form, providerCompanyId })} />
-        <Input label={credential?.hasApiKey ? `Nova chave API (${credential.apiKeyLast4 ? `atual termina em ${credential.apiKeyLast4}` : "ja cadastrada"})` : "Chave API"} type="password" value={form.apiKey} onChange={(apiKey) => onChange({ ...form, apiKey })} />
+        <Select
+          label="Provider"
+          value={form.provider}
+          values={fiscalProviders.filter((provider) => provider !== "MOCK")}
+          onChange={(provider) =>
+            onChange({ ...form, provider: provider as FiscalProvider })
+          }
+        />
+        <Select
+          label="Status"
+          value={form.status}
+          values={fiscalCredentialStatuses}
+          onChange={(status) =>
+            onChange({
+              ...form,
+              status: status as TenantFiscalCredentialStatus,
+            })
+          }
+        />
+        <Input
+          label="ID empresa no provider"
+          value={form.providerCompanyId}
+          onChange={(providerCompanyId) =>
+            onChange({ ...form, providerCompanyId })
+          }
+        />
+        <Input
+          label={
+            credential?.hasApiKey
+              ? `Nova chave API (${credential.apiKeyLast4 ? `atual termina em ${credential.apiKeyLast4}` : "ja cadastrada"})`
+              : "Chave API"
+          }
+          type="password"
+          value={form.apiKey}
+          onChange={(apiKey) => onChange({ ...form, apiKey })}
+        />
       </div>
-      <button className="mt-5 inline-flex h-10 items-center gap-2 rounded-md bg-[#28785d] px-4 text-sm font-medium text-white disabled:opacity-60" disabled={isSaving} type="submit">
+      <button
+        className="mt-5 inline-flex h-10 items-center gap-2 rounded-md bg-[#28785d] px-4 text-sm font-medium text-white disabled:opacity-60"
+        disabled={isSaving}
+        type="submit"
+      >
         <Save className="size-4" />
         Salvar credencial
       </button>
@@ -686,21 +1048,48 @@ function TitularesPanel({
         <h2 className="text-lg font-semibold">Titulares do tenant</h2>
       </div>
       <div className="grid gap-4 md:grid-cols-[1fr_220px_auto]">
-        <Select label="Usuario" value={titularUserId} values={users.map((user) => user.id)} labels={Object.fromEntries(users.map((user) => [user.id, `${user.name} · ${user.email}`]))} onChange={setTitularUserId} />
-        <Select label="Papel" value={titularRole} values={titularRoles} onChange={(role) => setTitularRole(role as TenantTitularRole)} />
-        <button className="mt-7 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#1d2520] px-4 text-sm font-medium text-white disabled:opacity-60" disabled={!selectedTenant || !titularUserId} onClick={addTitular} type="button">
+        <Select
+          label="Usuario"
+          value={titularUserId}
+          values={users.map((user) => user.id)}
+          labels={Object.fromEntries(
+            users.map((user) => [user.id, `${user.name} · ${user.email}`]),
+          )}
+          onChange={setTitularUserId}
+        />
+        <Select
+          label="Papel"
+          value={titularRole}
+          values={titularRoles}
+          onChange={(role) => setTitularRole(role as TenantTitularRole)}
+        />
+        <button
+          className="mt-7 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#1d2520] px-4 text-sm font-medium text-white disabled:opacity-60"
+          disabled={!selectedTenant || !titularUserId}
+          onClick={addTitular}
+          type="button"
+        >
           <Plus className="size-4" />
           Vincular
         </button>
       </div>
       <div className="mt-5 divide-y divide-[#edf0eb]">
         {selectedTenant?.titulares.map((titular) => (
-          <div className="flex flex-wrap items-center justify-between gap-3 py-3" key={titular.id}>
+          <div
+            className="flex flex-wrap items-center justify-between gap-3 py-3"
+            key={titular.id}
+          >
             <div>
               <p className="font-medium">{titular.user.name}</p>
-              <p className="text-sm text-[#607568]">{titular.role} · {titular.user.email}</p>
+              <p className="text-sm text-[#607568]">
+                {titular.role} · {titular.user.email}
+              </p>
             </div>
-            <button className="inline-flex h-9 items-center gap-2 rounded-md border border-red-200 px-3 text-sm font-medium text-red-700" onClick={() => removeTitular(titular.id)} type="button">
+            <button
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-red-200 px-3 text-sm font-medium text-red-700"
+              onClick={() => removeTitular(titular.id)}
+              type="button"
+            >
               <Trash2 className="size-4" />
               Remover
             </button>
@@ -747,7 +1136,15 @@ function ClientsPanel({
       <aside className="space-y-4">
         <Select
           label="Empresa"
-          labels={{ "": "Selecione uma empresa", ...Object.fromEntries(tenants.map((tenant) => [tenant.id, tenant.tradeName || tenant.legalName])) }}
+          labels={{
+            "": "Selecione uma empresa",
+            ...Object.fromEntries(
+              tenants.map((tenant) => [
+                tenant.id,
+                tenant.tradeName || tenant.legalName,
+              ]),
+            ),
+          }}
           onChange={setSelectedTenantId}
           value={selectedTenant?.id ?? ""}
           values={["", ...tenants.map((tenant) => tenant.id)]}
@@ -774,14 +1171,20 @@ function ClientsPanel({
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="font-semibold">{client.tradeName || client.name}</p>
-                <p className="mt-1 text-sm text-[#607568]">{formatDocument(client.document)}</p>
+                <p className="font-semibold">
+                  {client.tradeName || client.name}
+                </p>
+                <p className="mt-1 text-sm text-[#607568]">
+                  {formatDocument(client.document)}
+                </p>
               </div>
               <span className="rounded-md bg-[#e6f0e9] px-2 py-1 text-xs font-medium text-[#28785d]">
                 {client.type}
               </span>
             </div>
-            <p className="mt-3 text-sm text-[#4d5b52]">{client.email || "Sem email cadastrado"}</p>
+            <p className="mt-3 text-sm text-[#4d5b52]">
+              {client.email || "Sem email cadastrado"}
+            </p>
           </button>
         ))}
       </aside>
@@ -792,37 +1195,131 @@ function ClientsPanel({
       >
         <div className="mb-5 flex items-center gap-3">
           <UsersRound className="size-5 text-[#28785d]" />
-          <h2 className="text-lg font-semibold">{selectedClient ? "Editar cliente" : "Novo cliente"}</h2>
+          <h2 className="text-lg font-semibold">
+            {selectedClient ? "Editar cliente" : "Novo cliente"}
+          </h2>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
-          <Select label="Tipo" value={form.type} values={clientTypes} onChange={(type) => onFormChange({ ...form, type: type as ClientType })} />
-          <Select label="Status" value={form.status} values={clientStatuses} onChange={(status) => onFormChange({ ...form, status: status as ClientStatus })} />
-          <Input label="Nome/Razao social" value={form.name} onChange={(name) => onFormChange({ ...form, name })} />
-          <Input label="Nome fantasia" value={form.tradeName} onChange={(tradeName) => onFormChange({ ...form, tradeName })} />
-          <Input label="CPF/CNPJ" value={form.document} onChange={(document) => onFormChange({ ...form, document })} />
-          <Input label="Email" type="email" value={form.email} onChange={(email) => onFormChange({ ...form, email })} />
-          <Input label="Telefone" value={form.phone} onChange={(phone) => onFormChange({ ...form, phone })} />
-          <Input label="Inscricao municipal" value={form.municipalRegistration} onChange={(municipalRegistration) => onFormChange({ ...form, municipalRegistration })} />
-          <Input label="Inscricao estadual" value={form.stateRegistration} onChange={(stateRegistration) => onFormChange({ ...form, stateRegistration })} />
+          <Select
+            label="Tipo"
+            value={form.type}
+            values={clientTypes}
+            onChange={(type) =>
+              onFormChange({ ...form, type: type as ClientType })
+            }
+          />
+          <Select
+            label="Status"
+            value={form.status}
+            values={clientStatuses}
+            onChange={(status) =>
+              onFormChange({ ...form, status: status as ClientStatus })
+            }
+          />
+          <Input
+            label="Nome/Razao social"
+            value={form.name}
+            onChange={(name) => onFormChange({ ...form, name })}
+          />
+          <Input
+            label="Nome fantasia"
+            value={form.tradeName}
+            onChange={(tradeName) => onFormChange({ ...form, tradeName })}
+          />
+          <Input
+            label="CPF/CNPJ"
+            value={form.document}
+            onChange={(document) => onFormChange({ ...form, document })}
+          />
+          <Input
+            label="Email"
+            type="email"
+            value={form.email}
+            onChange={(email) => onFormChange({ ...form, email })}
+          />
+          <Input
+            label="Telefone"
+            value={form.phone}
+            onChange={(phone) => onFormChange({ ...form, phone })}
+          />
+          <Input
+            label="Inscricao municipal"
+            value={form.municipalRegistration}
+            onChange={(municipalRegistration) =>
+              onFormChange({ ...form, municipalRegistration })
+            }
+          />
+          <Input
+            label="Inscricao estadual"
+            value={form.stateRegistration}
+            onChange={(stateRegistration) =>
+              onFormChange({ ...form, stateRegistration })
+            }
+          />
         </div>
         <div className="mt-4 grid gap-4 md:grid-cols-3">
-          <Input label="Logradouro" value={form.addressStreet} onChange={(addressStreet) => onFormChange({ ...form, addressStreet })} />
-          <Input label="Numero" value={form.addressNumber} onChange={(addressNumber) => onFormChange({ ...form, addressNumber })} />
-          <Input label="CEP" value={form.addressZipCode} onChange={(addressZipCode) => onFormChange({ ...form, addressZipCode })} />
-          <Input label="Bairro" value={form.addressNeighborhood} onChange={(addressNeighborhood) => onFormChange({ ...form, addressNeighborhood })} />
-          <Input label="Cidade" value={form.addressCity} onChange={(addressCity) => onFormChange({ ...form, addressCity })} />
-          <Input label="UF" value={form.addressState} onChange={(addressState) => onFormChange({ ...form, addressState })} />
+          <Input
+            label="Logradouro"
+            value={form.addressStreet}
+            onChange={(addressStreet) =>
+              onFormChange({ ...form, addressStreet })
+            }
+          />
+          <Input
+            label="Numero"
+            value={form.addressNumber}
+            onChange={(addressNumber) =>
+              onFormChange({ ...form, addressNumber })
+            }
+          />
+          <Input
+            label="CEP"
+            value={form.addressZipCode}
+            onChange={(addressZipCode) =>
+              onFormChange({ ...form, addressZipCode })
+            }
+          />
+          <Input
+            label="Bairro"
+            value={form.addressNeighborhood}
+            onChange={(addressNeighborhood) =>
+              onFormChange({ ...form, addressNeighborhood })
+            }
+          />
+          <Input
+            label="Cidade"
+            value={form.addressCity}
+            onChange={(addressCity) => onFormChange({ ...form, addressCity })}
+          />
+          <Input
+            label="UF"
+            value={form.addressState}
+            onChange={(addressState) => onFormChange({ ...form, addressState })}
+          />
         </div>
         <div className="mt-4">
-          <Textarea label="Observacoes internas" value={form.notes} onChange={(notes) => onFormChange({ ...form, notes })} />
+          <Textarea
+            label="Observacoes internas"
+            value={form.notes}
+            onChange={(notes) => onFormChange({ ...form, notes })}
+          />
         </div>
         <div className="mt-5 flex flex-wrap gap-3">
-          <button className="inline-flex h-10 items-center gap-2 rounded-md bg-[#28785d] px-4 text-sm font-medium text-white disabled:opacity-60" disabled={isSaving || !selectedTenant} type="submit">
+          <button
+            className="inline-flex h-10 items-center gap-2 rounded-md bg-[#28785d] px-4 text-sm font-medium text-white disabled:opacity-60"
+            disabled={isSaving || !selectedTenant}
+            type="submit"
+          >
             <Save className="size-4" />
             {selectedClient ? "Salvar cliente" : "Criar cliente"}
           </button>
           {selectedClient ? (
-            <button className="inline-flex h-10 items-center gap-2 rounded-md border border-red-200 px-4 text-sm font-medium text-red-700 disabled:opacity-50" disabled={isSaving} onClick={() => deleteClient(selectedClient)} type="button">
+            <button
+              className="inline-flex h-10 items-center gap-2 rounded-md border border-red-200 px-4 text-sm font-medium text-red-700 disabled:opacity-50"
+              disabled={isSaving}
+              onClick={() => deleteClient(selectedClient)}
+              type="button"
+            >
               <Trash2 className="size-4" />
               Excluir
             </button>
@@ -855,39 +1352,156 @@ function InvoiceForm({
   tenants: Tenant[];
 }) {
   return (
-    <form className="rounded-md border border-[#d9ded6] bg-white p-5 shadow-sm" onSubmit={onSubmit}>
+    <form
+      className="rounded-md border border-[#d9ded6] bg-white p-5 shadow-sm"
+      onSubmit={onSubmit}
+    >
       <div className="mb-5 flex items-center gap-3">
         <ReceiptText className="size-5 text-[#28785d]" />
         <h2 className="text-lg font-semibold">Emitir NFS-e</h2>
       </div>
       <div className="grid gap-4">
-        <Select label="Empresa emissora" value={selectedTenant?.id ?? ""} values={["", ...tenants.map((tenant) => tenant.id)]} labels={{ "": "Selecione uma empresa", ...Object.fromEntries(tenants.map((tenant) => [tenant.id, tenant.tradeName || tenant.legalName])) }} onChange={setSelectedTenantId} />
-        <Select label="Cliente cadastrado" value={form.clientId} values={["", ...clients.map((client) => client.id)]} labels={{ "": "Preencher manualmente", ...Object.fromEntries(clients.map((client) => [client.id, `${client.tradeName || client.name} - ${formatDocument(client.document)}`])) }} onChange={onClientSelect} />
-        <Input label="Tomador" value={form.borrowerName} onChange={(borrowerName) => onChange({ ...form, borrowerName })} />
-        <Input label="CPF/CNPJ tomador" value={form.borrowerDocument} onChange={(borrowerDocument) => onChange({ ...form, borrowerDocument })} />
-        <Input label="Email tomador" type="email" value={form.borrowerEmail} onChange={(borrowerEmail) => onChange({ ...form, borrowerEmail })} />
+        <Select
+          label="Empresa emissora"
+          value={selectedTenant?.id ?? ""}
+          values={["", ...tenants.map((tenant) => tenant.id)]}
+          labels={{
+            "": "Selecione uma empresa",
+            ...Object.fromEntries(
+              tenants.map((tenant) => [
+                tenant.id,
+                tenant.tradeName || tenant.legalName,
+              ]),
+            ),
+          }}
+          onChange={setSelectedTenantId}
+        />
+        <Select
+          label="Cliente cadastrado"
+          value={form.clientId}
+          values={["", ...clients.map((client) => client.id)]}
+          labels={{
+            "": "Preencher manualmente",
+            ...Object.fromEntries(
+              clients.map((client) => [
+                client.id,
+                `${client.tradeName || client.name} - ${formatDocument(client.document)}`,
+              ]),
+            ),
+          }}
+          onChange={onClientSelect}
+        />
+        <Input
+          label="Tomador"
+          value={form.borrowerName}
+          onChange={(borrowerName) => onChange({ ...form, borrowerName })}
+        />
+        <Input
+          label="CPF/CNPJ tomador"
+          value={form.borrowerDocument}
+          onChange={(borrowerDocument) =>
+            onChange({ ...form, borrowerDocument })
+          }
+        />
+        <Input
+          label="Email tomador"
+          type="email"
+          value={form.borrowerEmail}
+          onChange={(borrowerEmail) => onChange({ ...form, borrowerEmail })}
+        />
         <div className="grid gap-4 md:grid-cols-3">
-          <Input label="Logradouro tomador" value={form.borrowerStreet} onChange={(borrowerStreet) => onChange({ ...form, borrowerStreet })} />
-          <Input label="Numero" value={form.borrowerNumber} onChange={(borrowerNumber) => onChange({ ...form, borrowerNumber })} />
-          <Input label="CEP" value={form.borrowerZipCode} onChange={(borrowerZipCode) => onChange({ ...form, borrowerZipCode })} />
-          <Input label="Bairro" value={form.borrowerNeighborhood} onChange={(borrowerNeighborhood) => onChange({ ...form, borrowerNeighborhood })} />
-          <Input label="Cidade" value={form.borrowerCity} onChange={(borrowerCity) => onChange({ ...form, borrowerCity })} />
-          <Input label="UF" value={form.borrowerState} onChange={(borrowerState) => onChange({ ...form, borrowerState })} />
+          <Input
+            label="Logradouro tomador"
+            value={form.borrowerStreet}
+            onChange={(borrowerStreet) => onChange({ ...form, borrowerStreet })}
+          />
+          <Input
+            label="Numero"
+            value={form.borrowerNumber}
+            onChange={(borrowerNumber) => onChange({ ...form, borrowerNumber })}
+          />
+          <Input
+            label="CEP"
+            value={form.borrowerZipCode}
+            onChange={(borrowerZipCode) =>
+              onChange({ ...form, borrowerZipCode })
+            }
+          />
+          <Input
+            label="Bairro"
+            value={form.borrowerNeighborhood}
+            onChange={(borrowerNeighborhood) =>
+              onChange({ ...form, borrowerNeighborhood })
+            }
+          />
+          <Input
+            label="Cidade"
+            value={form.borrowerCity}
+            onChange={(borrowerCity) => onChange({ ...form, borrowerCity })}
+          />
+          <Input
+            label="UF"
+            value={form.borrowerState}
+            onChange={(borrowerState) => onChange({ ...form, borrowerState })}
+          />
         </div>
-        <Textarea label="Descricao do servico" value={form.serviceDescription} onChange={(serviceDescription) => onChange({ ...form, serviceDescription })} />
+        <Textarea
+          label="Descricao do servico"
+          value={form.serviceDescription}
+          onChange={(serviceDescription) =>
+            onChange({ ...form, serviceDescription })
+          }
+        />
         <div className="grid gap-4 md:grid-cols-3">
-          <Input label="Valor" type="number" value={form.amount} onChange={(amount) => onChange({ ...form, amount })} />
-          <Input label="Deducoes" type="number" value={form.deductions} onChange={(deductions) => onChange({ ...form, deductions })} />
-          <Input label="Aliquota ISS" type="number" value={form.issRate} onChange={(issRate) => onChange({ ...form, issRate })} />
+          <Input
+            label="Valor"
+            type="number"
+            value={form.amount}
+            onChange={(amount) => onChange({ ...form, amount })}
+          />
+          <Input
+            label="Deducoes"
+            type="number"
+            value={form.deductions}
+            onChange={(deductions) => onChange({ ...form, deductions })}
+          />
+          <Input
+            label="Aliquota ISS"
+            type="number"
+            value={form.issRate}
+            onChange={(issRate) => onChange({ ...form, issRate })}
+          />
         </div>
         <div className="grid gap-4 md:grid-cols-3">
-          <Input label="Codigo servico" value={form.serviceCode} onChange={(serviceCode) => onChange({ ...form, serviceCode })} />
-          <Input label="CNAE" value={form.cnaeCode} onChange={(cnaeCode) => onChange({ ...form, cnaeCode })} />
-          <Input label="Codigo municipal" value={form.municipalTaxCode} onChange={(municipalTaxCode) => onChange({ ...form, municipalTaxCode })} />
+          <Input
+            label="Codigo servico"
+            value={form.serviceCode}
+            onChange={(serviceCode) => onChange({ ...form, serviceCode })}
+          />
+          <Input
+            label="CNAE"
+            value={form.cnaeCode}
+            onChange={(cnaeCode) => onChange({ ...form, cnaeCode })}
+          />
+          <Input
+            label="Codigo municipal"
+            value={form.municipalTaxCode}
+            onChange={(municipalTaxCode) =>
+              onChange({ ...form, municipalTaxCode })
+            }
+          />
         </div>
-        <Textarea label="Observacoes" value={form.notes} onChange={(notes) => onChange({ ...form, notes })} />
+        <Textarea
+          label="Observacoes"
+          value={form.notes}
+          onChange={(notes) => onChange({ ...form, notes })}
+        />
       </div>
-      <button className="mt-5 inline-flex h-10 items-center gap-2 rounded-md bg-[#28785d] px-4 text-sm font-medium text-white disabled:opacity-60" disabled={isSaving || !selectedTenant} type="submit">
+      <button
+        className="mt-5 inline-flex h-10 items-center gap-2 rounded-md bg-[#28785d] px-4 text-sm font-medium text-white disabled:opacity-60"
+        disabled={isSaving || !selectedTenant}
+        type="submit"
+      >
         <FileText className="size-4" />
         Emitir nota
       </button>
@@ -895,7 +1509,13 @@ function InvoiceForm({
   );
 }
 
-function InvoiceHistory({ invoices, tenants }: { invoices: ServiceInvoice[]; tenants: Tenant[] }) {
+function InvoiceHistory({
+  invoices,
+  tenants,
+}: {
+  invoices: ServiceInvoice[];
+  tenants: Tenant[];
+}) {
   return (
     <section className="rounded-md border border-[#d9ded6] bg-white p-5 shadow-sm">
       <div className="mb-5 flex items-center gap-3">
@@ -906,17 +1526,29 @@ function InvoiceHistory({ invoices, tenants }: { invoices: ServiceInvoice[]; ten
         {invoices.map((invoice) => {
           const tenant = tenants.find((item) => item.id === invoice.tenantId);
           return (
-            <div className="grid gap-2 py-4 md:grid-cols-[1fr_120px_140px]" key={invoice.id}>
+            <div
+              className="grid gap-2 py-4 md:grid-cols-[1fr_120px_140px]"
+              key={invoice.id}
+            >
               <div>
                 <p className="font-medium">{invoice.borrowerName}</p>
-                <p className="text-sm text-[#607568]">{tenant?.tradeName || tenant?.legalName} · {invoice.serviceDescription}</p>
+                <p className="text-sm text-[#607568]">
+                  {tenant?.tradeName || tenant?.legalName} ·{" "}
+                  {invoice.serviceDescription}
+                </p>
               </div>
               <p className="font-semibold">{formatCurrency(invoice.amount)}</p>
-              <span className="w-fit rounded-md bg-[#e6f0e9] px-2 py-1 text-xs font-medium text-[#28785d]">{invoice.status}</span>
+              <span
+                className={`w-fit rounded-md px-2 py-1 text-xs font-medium ${invoiceStatusClass(invoice.status)}`}
+              >
+                {invoiceStatusLabels[invoice.status]}
+              </span>
             </div>
           );
         })}
-        {invoices.length === 0 ? <p className="text-sm text-[#607568]">Nenhuma nota emitida ainda.</p> : null}
+        {invoices.length === 0 ? (
+          <p className="text-sm text-[#607568]">Nenhuma nota emitida ainda.</p>
+        ) : null}
       </div>
     </section>
   );
@@ -951,37 +1583,65 @@ function UsersPanel({
     <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
       <aside className="space-y-3">
         {users.map((user) => (
-          <button className="w-full rounded-md border border-[#d9ded6] bg-white p-4 text-left shadow-sm" key={user.id} onClick={() => setSelectedUserId(user.id)} type="button">
+          <button
+            className="w-full rounded-md border border-[#d9ded6] bg-white p-4 text-left shadow-sm"
+            key={user.id}
+            onClick={() => setSelectedUserId(user.id)}
+            type="button"
+          >
             <p className="font-semibold">{user.name}</p>
             <p className="mt-1 text-sm text-[#607568]">{user.email}</p>
           </button>
         ))}
       </aside>
       <section className="grid gap-6 xl:grid-cols-2">
-        <form className="rounded-md border border-[#d9ded6] bg-white p-5 shadow-sm" onSubmit={createUser}>
+        <form
+          className="rounded-md border border-[#d9ded6] bg-white p-5 shadow-sm"
+          onSubmit={createUser}
+        >
           <div className="mb-5 flex items-center gap-3">
             <Plus className="size-5 text-[#28785d]" />
             <h2 className="text-lg font-semibold">Novo usuario</h2>
           </div>
           <UserFields form={newUserForm} setForm={setNewUserForm} />
-          <button className="mt-5 inline-flex h-10 items-center gap-2 rounded-md bg-[#28785d] px-4 text-sm font-medium text-white disabled:opacity-60" disabled={isSaving} type="submit">
+          <button
+            className="mt-5 inline-flex h-10 items-center gap-2 rounded-md bg-[#28785d] px-4 text-sm font-medium text-white disabled:opacity-60"
+            disabled={isSaving}
+            type="submit"
+          >
             <Plus className="size-4" />
             Criar
           </button>
         </form>
-        <form className="rounded-md border border-[#d9ded6] bg-white p-5 shadow-sm" onSubmit={updateSelectedUser}>
+        <form
+          className="rounded-md border border-[#d9ded6] bg-white p-5 shadow-sm"
+          onSubmit={updateSelectedUser}
+        >
           <div className="mb-5 flex items-center gap-3">
             <UserRoundCog className="size-5 text-[#28785d]" />
             <h2 className="text-lg font-semibold">Editar usuario</h2>
           </div>
-          <UserFields form={editUserForm} passwordPlaceholder="Nova senha opcional" setForm={setEditUserForm} />
+          <UserFields
+            form={editUserForm}
+            passwordPlaceholder="Nova senha opcional"
+            setForm={setEditUserForm}
+          />
           <div className="mt-5 flex flex-wrap gap-3">
-            <button className="inline-flex h-10 items-center gap-2 rounded-md bg-[#1d2520] px-4 text-sm font-medium text-white disabled:opacity-60" disabled={isSaving || !selectedUser} type="submit">
+            <button
+              className="inline-flex h-10 items-center gap-2 rounded-md bg-[#1d2520] px-4 text-sm font-medium text-white disabled:opacity-60"
+              disabled={isSaving || !selectedUser}
+              type="submit"
+            >
               <Save className="size-4" />
               Salvar
             </button>
             {selectedUser ? (
-              <button className="inline-flex h-10 items-center gap-2 rounded-md border border-red-200 px-4 text-sm font-medium text-red-700 disabled:opacity-50" disabled={isSaving} onClick={() => deleteUser(selectedUser)} type="button">
+              <button
+                className="inline-flex h-10 items-center gap-2 rounded-md border border-red-200 px-4 text-sm font-medium text-red-700 disabled:opacity-50"
+                disabled={isSaving}
+                onClick={() => deleteUser(selectedUser)}
+                type="button"
+              >
                 <Trash2 className="size-4" />
                 Excluir
               </button>
@@ -1004,29 +1664,83 @@ function UserFields({
 }) {
   return (
     <div className="grid gap-4">
-      <Input label="Nome" value={form.name} onChange={(name) => setForm({ ...form, name })} />
-      <Input label="Email" type="email" value={form.email} onChange={(email) => setForm({ ...form, email })} />
-      <Input label="Senha" placeholder={passwordPlaceholder} type="password" value={form.password} onChange={(password) => setForm({ ...form, password })} />
+      <Input
+        label="Nome"
+        value={form.name}
+        onChange={(name) => setForm({ ...form, name })}
+      />
+      <Input
+        label="Email"
+        type="email"
+        value={form.email}
+        onChange={(email) => setForm({ ...form, email })}
+      />
+      <Input
+        label="Senha"
+        placeholder={passwordPlaceholder}
+        type="password"
+        value={form.password}
+        onChange={(password) => setForm({ ...form, password })}
+      />
       <div className="grid gap-4 sm:grid-cols-2">
-        <Select label="Role" value={form.role} values={roles} onChange={(role) => setForm({ ...form, role: role as UserRole })} />
-        <Select label="Status" value={form.status} values={statuses} onChange={(status) => setForm({ ...form, status: status as UserStatus })} />
+        <Select
+          label="Role"
+          value={form.role}
+          values={roles}
+          onChange={(role) => setForm({ ...form, role: role as UserRole })}
+        />
+        <Select
+          label="Status"
+          value={form.status}
+          values={statuses}
+          onChange={(status) =>
+            setForm({ ...form, status: status as UserStatus })
+          }
+        />
       </div>
     </div>
   );
 }
 
-function SearchBox({ placeholder, query, setQuery }: { placeholder: string; query: string; setQuery: (query: string) => void }) {
+function SearchBox({
+  placeholder,
+  query,
+  setQuery,
+}: {
+  placeholder: string;
+  query: string;
+  setQuery: (query: string) => void;
+}) {
   return (
     <div className="flex h-11 items-center gap-2 rounded-md border border-[#d9ded6] bg-white px-3">
       <Search className="size-4 text-[#607568]" />
-      <input className="w-full bg-transparent text-sm outline-none" onChange={(event) => setQuery(event.target.value)} placeholder={placeholder} value={query} />
+      <input
+        className="w-full bg-transparent text-sm outline-none"
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder={placeholder}
+        value={query}
+      />
     </div>
   );
 }
 
-function TabButton({ active, icon, label, onClick }: { active: boolean; icon: ReactNode; label: string; onClick: () => void }) {
+function TabButton({
+  active,
+  icon,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  icon: ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
   return (
-    <button className={`inline-flex h-10 items-center gap-2 rounded-md px-4 text-sm font-medium ${active ? "bg-[#1d2520] text-white" : "border border-[#d9ded6] bg-white text-[#4d5b52]"}`} onClick={onClick} type="button">
+    <button
+      className={`inline-flex h-10 items-center gap-2 rounded-md px-4 text-sm font-medium ${active ? "bg-[#1d2520] text-white" : "border border-[#d9ded6] bg-white text-[#4d5b52]"}`}
+      onClick={onClick}
+      type="button"
+    >
       {icon}
       {label}
     </button>
@@ -1049,16 +1763,34 @@ function Input({
   return (
     <label className="block text-sm font-medium text-[#4d5b52]">
       {label}
-      <input className="mt-2 h-10 w-full rounded-md border border-[#d9ded6] px-3 text-sm outline-none focus:border-[#28785d]" onChange={(event) => onChange(event.target.value)} placeholder={placeholder} type={type} value={value} />
+      <input
+        className="mt-2 h-10 w-full rounded-md border border-[#d9ded6] px-3 text-sm outline-none focus:border-[#28785d]"
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        type={type}
+        value={value}
+      />
     </label>
   );
 }
 
-function Textarea({ label, onChange, value }: { label: string; onChange: (value: string) => void; value: string }) {
+function Textarea({
+  label,
+  onChange,
+  value,
+}: {
+  label: string;
+  onChange: (value: string) => void;
+  value: string;
+}) {
   return (
     <label className="block text-sm font-medium text-[#4d5b52]">
       {label}
-      <textarea className="mt-2 min-h-24 w-full rounded-md border border-[#d9ded6] px-3 py-2 text-sm outline-none focus:border-[#28785d]" onChange={(event) => onChange(event.target.value)} value={value} />
+      <textarea
+        className="mt-2 min-h-24 w-full rounded-md border border-[#d9ded6] px-3 py-2 text-sm outline-none focus:border-[#28785d]"
+        onChange={(event) => onChange(event.target.value)}
+        value={value}
+      />
     </label>
   );
 }
@@ -1079,7 +1811,11 @@ function Select({
   return (
     <label className="block text-sm font-medium text-[#4d5b52]">
       {label}
-      <select className="mt-2 h-10 w-full rounded-md border border-[#d9ded6] bg-white px-3 text-sm outline-none focus:border-[#28785d]" onChange={(event) => onChange(event.target.value)} value={value}>
+      <select
+        className="mt-2 h-10 w-full rounded-md border border-[#d9ded6] bg-white px-3 text-sm outline-none focus:border-[#28785d]"
+        onChange={(event) => onChange(event.target.value)}
+        value={value}
+      >
         {values.map((item) => (
           <option key={item} value={item}>
             {labels?.[item] ?? item}
@@ -1156,7 +1892,8 @@ function fiscalCredentialToForm(
   return {
     provider: credential?.provider ?? tenant.fiscalProvider,
     status: credential?.status ?? "ACTIVE",
-    providerCompanyId: credential?.providerCompanyId ?? tenant.fiscalProviderCompanyId ?? "",
+    providerCompanyId:
+      credential?.providerCompanyId ?? tenant.fiscalProviderCompanyId ?? "",
     apiKey: "",
   };
 }
@@ -1224,9 +1961,29 @@ function optional(value: string) {
   return value.trim() ? value.trim() : undefined;
 }
 
+function hasActiveInvoiceJobs(invoices?: ServiceInvoice[]) {
+  return (
+    invoices?.some((invoice) => activeInvoiceStatuses.has(invoice.status)) ??
+    false
+  );
+}
+
+function invoiceStatusClass(status: ServiceInvoiceStatus) {
+  if (status === "AUTHORIZED") return "bg-[#e6f0e9] text-[#28785d]";
+  if (status === "REJECTED" || status === "FAILED_FINAL")
+    return "bg-red-50 text-red-700";
+  if (status === "FAILED_RETRYING") return "bg-amber-50 text-amber-700";
+  if (status === "CANCELLED") return "bg-[#edf0eb] text-[#4d5b52]";
+
+  return "bg-blue-50 text-blue-700";
+}
+
 function formatCnpj(value: string) {
   const digits = onlyDigits(value);
-  return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5");
+  return digits.replace(
+    /^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,
+    "$1.$2.$3/$4-$5",
+  );
 }
 
 function formatDocument(value: string) {
@@ -1239,5 +1996,8 @@ function formatDocument(value: string) {
 }
 
 function formatCurrency(value: number) {
-  return new Intl.NumberFormat("pt-BR", { currency: "BRL", style: "currency" }).format(value);
+  return new Intl.NumberFormat("pt-BR", {
+    currency: "BRL",
+    style: "currency",
+  }).format(value);
 }

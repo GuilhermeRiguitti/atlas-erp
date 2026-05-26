@@ -1,11 +1,27 @@
 export type UserRole = "ADMIN" | "MEMBER" | "RECRUITER";
 export type UserStatus = "ACTIVE" | "INVITED" | "SUSPENDED";
 export type TenantStatus = "ACTIVE" | "ONBOARDING" | "SUSPENDED";
-export type TenantTaxRegime = "SIMPLES_NACIONAL" | "LUCRO_PRESUMIDO" | "LUCRO_REAL" | "MEI";
-export type TenantTitularRole = "OWNER" | "PARTNER" | "ACCOUNTANT" | "FINANCIAL_MANAGER";
+export type TenantTaxRegime =
+  | "SIMPLES_NACIONAL"
+  | "LUCRO_PRESUMIDO"
+  | "LUCRO_REAL"
+  | "MEI";
+export type TenantTitularRole =
+  | "OWNER"
+  | "PARTNER"
+  | "ACCOUNTANT"
+  | "FINANCIAL_MANAGER";
 export type FiscalProvider = "MOCK" | "NFE_IO";
 export type TenantFiscalCredentialStatus = "ACTIVE" | "DISABLED";
-export type ServiceInvoiceStatus = "DRAFT" | "PROCESSING" | "AUTHORIZED" | "REJECTED" | "CANCELLED";
+export type ServiceInvoiceStatus =
+  | "DRAFT"
+  | "QUEUED"
+  | "PROCESSING"
+  | "AUTHORIZED"
+  | "REJECTED"
+  | "FAILED_RETRYING"
+  | "FAILED_FINAL"
+  | "CANCELLED";
 export type ClientType = "INDIVIDUAL" | "COMPANY";
 export type ClientStatus = "ACTIVE" | "INACTIVE";
 
@@ -106,6 +122,10 @@ export type ServiceInvoice = {
   deductions: number;
   issRate?: number | null;
   notes?: string | null;
+  processingAttempts: number;
+  lastAttemptAt?: string | null;
+  lastFailureReason?: string | null;
+  queuedAt?: string | null;
   issuedAt?: string | null;
   createdAt: string;
   tenant?: Tenant;
@@ -144,7 +164,10 @@ export type Tenant = {
   updatedAt: string;
 };
 
-export type SessionUser = Pick<User, "id" | "name" | "email" | "role" | "status">;
+export type SessionUser = Pick<
+  User,
+  "id" | "name" | "email" | "role" | "status"
+>;
 
 export type SessionData = {
   user?: SessionUser;

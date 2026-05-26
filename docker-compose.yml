@@ -10,12 +10,28 @@ services:
       MYSQL_ROOT_PASSWORD: root_password
     command: --log-bin-trust-function-creators=1
     ports:
-      - "3306:3306"
+      - "127.0.0.1:3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uatlas -patlas_password --silent"]
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h 127.0.0.1 -uatlas -patlas_password --silent",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: atlas-users-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -30,13 +46,46 @@ services:
       DATABASE_URL: mysql://atlas:atlas_password@mysql:3306/atlas_users
       PORT: 3333
       WEB_ORIGIN: http://localhost:3000
+      INTERNAL_API_KEY: local_internal_api_key_change_me_32_chars
       ONBOARDING_JWT_SECRET: local_onboarding_jwt_secret_change_me_32_chars
       FISCAL_CREDENTIALS_ENCRYPTION_KEY: local_fiscal_credentials_key_change_me_32_chars
       NFEIO_BASE_URL: https://api.nfe.io
+      ALLOW_MOCK_FISCAL_PROVIDER: "true"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      FISCAL_QUEUE_ATTEMPTS: 5
+      FISCAL_QUEUE_BACKOFF_MS: 30000
     ports:
-      - "3333:3333"
+      - "127.0.0.1:3333:3333"
     depends_on:
       mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      target: api
+    container_name: atlas-users-worker
+    restart: unless-stopped
+    command: pnpm --filter api worker:prod
+    environment:
+      DATABASE_URL: mysql://atlas:atlas_password@mysql:3306/atlas_users
+      INTERNAL_API_KEY: local_internal_api_key_change_me_32_chars
+      ONBOARDING_JWT_SECRET: local_onboarding_jwt_secret_change_me_32_chars
+      FISCAL_CREDENTIALS_ENCRYPTION_KEY: local_fiscal_credentials_key_change_me_32_chars
+      NFEIO_BASE_URL: https://api.nfe.io
+      ALLOW_MOCK_FISCAL_PROVIDER: "true"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      FISCAL_QUEUE_ATTEMPTS: 5
+      FISCAL_QUEUE_BACKOFF_MS: 30000
+      FISCAL_QUEUE_CONCURRENCY: 2
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   web:
@@ -47,8 +96,9 @@ services:
     restart: unless-stopped
     environment:
       API_URL: http://api:3333
+      API_INTERNAL_KEY: local_internal_api_key_change_me_32_chars
       NEXT_PUBLIC_APP_NAME: ERP Fiscal
-      IRON_SESSION_PASSWORD: complex_password_at_least_32_characters_long_for_portfolio
+      IRON_SESSION_PASSWORD: local_iron_session_password_change_me_32_chars
     ports:
       - "3000:3000"
     depends_on:

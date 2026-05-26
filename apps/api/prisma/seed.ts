@@ -12,28 +12,38 @@ import * as bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function main() {
-  const passwordHash = await bcrypt.hash('portfolio123', 10);
+  if (
+    process.env.NODE_ENV === 'production' &&
+    process.env.ALLOW_PRODUCTION_SEED !== 'true'
+  ) {
+    throw new Error('Refusing to run seed in production');
+  }
+
+  const adminEmail = process.env.SEED_ADMIN_EMAIL;
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+  if (!adminEmail || !adminPassword) {
+    throw new Error('SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD are required');
+  }
+
+  const passwordHash = await bcrypt.hash(adminPassword, 10);
 
   const admin = await prisma.user.upsert({
-    where: { email: 'admin@atlas.dev' },
+    where: { email: adminEmail },
     update: {},
     create: {
-      name: 'Ada Portfolio',
-      email: 'admin@atlas.dev',
+      name: 'Admin ERP Fiscal',
+      email: adminEmail,
       passwordHash,
       role: UserRole.ADMIN,
       status: UserStatus.ACTIVE,
       profile: {
         create: {
-          headline: 'Product-minded Full Stack Engineer',
+          headline: 'ERP Fiscal Administrator',
           bio: 'Construo produtos internos com foco em clareza operacional, segurança e velocidade de entrega.',
           location: 'Sao Paulo, BR',
-          seniority: 'Senior',
-          skills: 'NestJS, Next.js, Prisma, PostgreSQL, Design Systems',
-          availability: 'Open to portfolio reviews',
-          website: 'https://portfolio.example',
-          github: 'https://github.com/example',
-          linkedin: 'https://linkedin.com/in/example',
+          seniority: 'Admin',
+          skills: 'ERP Fiscal, NFS-e, Tenants',
+          availability: 'Local development only',
         },
       },
     },

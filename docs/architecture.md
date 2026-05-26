@@ -15,10 +15,13 @@ erDiagram
   Tenant ||--o{ TenantFiscalCredential : "guarda credenciais"
   Tenant ||--o{ Client : "cadastra"
   Tenant ||--o{ ServiceInvoice : "emite"
+  Tenant ||--o{ FiscalAuditEvent : "audita"
   Client ||--o{ ServiceInvoice : "preenche tomador"
   User ||--o{ ServiceInvoice : "solicita emissao"
+  User ||--o{ FiscalAuditEvent : "origina evento"
   User ||--o{ Client : "cadastra"
   User ||--o| UserProfile : "tem perfil"
+  ServiceInvoice ||--o{ FiscalAuditEvent : "possui eventos"
 ```
 
 ## Responsabilidades
@@ -27,7 +30,8 @@ erDiagram
 - `TenantFiscalCredential`: credenciais fiscais criptografadas por tenant e provider, como API key e identificador da empresa no fornecedor.
 - `TenantTitular`: ligacao entre tenant e usuario, com papel societario/operacional, permissao de emissao e flag de representante legal.
 - `Client`: cadastro mestre de tomadores por tenant, com CPF/CNPJ, contato, endereco, inscricoes e usuario que cadastrou.
-- `ServiceInvoice`: nota fiscal de servico solicitada pelo sistema, com tomador, servico, valores, status, payload enviado e resposta do provider.
+- `ServiceInvoice`: nota fiscal de servico solicitada pelo sistema, com tomador, servico, valores, status, payload enviado, resposta do provider e metadados de fila/retry.
+- `FiscalAuditEvent`: trilha de auditoria fiscal para emissao, rejeicao, falhas e futuramente cancelamento/alteracao de credenciais.
 - `User`: identidade de login e permissao geral do sistema.
 
 ## Backend
@@ -38,9 +42,12 @@ O backend Nest concentra todo o dominio:
 - `OnboardingModule`: valida token JWT de contratacao, cria tenant e vincula o usuario existente como titular inicial.
 - `ClientsModule`: CRUD de clientes por tenant.
 - `InvoicesModule`: emissao e historico de notas de servico.
+- `FiscalInvoiceProcessor`: worker BullMQ que processa emissao fiscal em background.
+- `QueueModule`: conexao BullMQ/Redis compartilhada entre API e worker.
 - `FiscalProviderFactory`: escolhe o adapter fiscal configurado no tenant.
 - `TenantFiscalCredentialsService`: persiste credenciais fiscais por tenant, sem expor o segredo nas respostas da API.
 - `TenantSecretCryptoService`: criptografa e descriptografa segredos fiscais com AES-256-GCM.
+- Guard interno por `INTERNAL_API_KEY`: protege o Nest contra chamadas diretas quando configurado.
 - `PrismaModule`: acesso ao MySQL via Prisma.
 - `AuthModule`: validacao de credenciais.
 
@@ -63,6 +70,32 @@ modules/<module>
 Hoje os services concentram os casos de uso para manter o projeto enxuto. Quando a regra crescer, os casos de uso podem migrar para handlers em `application/commands` e `application/queries` sem mudar a borda HTTP.
 
 O frontend nunca fala direto com o banco nem com API fiscal externa. Ele chama as rotas do Next, que validam sessao com `iron-session` e repassam para o Nest.
+
+## Fila fiscal
+
+A API nao chama o provider fiscal diretamente no request HTTP de emissao. Ela cria a `ServiceInvoice` como `QUEUED`, grava `FiscalAuditEvent` e publica um job na fila `fiscal-invoices`.
+
+```mermaid
+sequenceDiagram
+  participant Web as Next Web
+  participant API as Nest API
+  participant DB as MySQL
+  participant Redis as Redis/BullMQ
+  participant Worker as Fiscal Worker
+  participant Provider as Provider Fiscal
+
+  Web->>API: POST /service-invoices
+  API->>DB: Cria ServiceInvoice QUEUED + auditoria
+  API->>Redis: Publica issue-service-invoice
+  API-->>Web: Retorna nota na fila
+  Worker->>Redis: Consome job
+  Worker->>DB: Marca PROCESSING + tentativa
+  Worker->>Provider: Envia NFS-e
+  Provider-->>Worker: Autorizada, processando ou erro
+  Worker->>DB: Atualiza status + payload/response + auditoria
+```
+
+O worker usa `attempts`, `backoff` exponencial e `concurrency` configuraveis. Jobs usam `jobId` baseado no `ServiceInvoice.id`, evitando duplicidade quando o worker recupera notas pendentes. Ao iniciar, e depois em intervalo, o worker reenvia para a fila notas `QUEUED` ou `FAILED_RETRYING` sem `providerExternalId`.
 
 ## Frontend
 
@@ -124,12 +157,12 @@ sequenceDiagram
 Enquanto o webhook real nao existe, o script de desenvolvimento gera um link valido para um usuario existente:
 
 ```bash
-pnpm onboarding:token -- --email admin@atlas.dev
+pnpm onboarding:token -- --email "$SEED_ADMIN_EMAIL"
 ```
 
 ## Banco
 
-MySQL roda em container separado. As alteracoes de schema devem ser versionadas com Prisma Migrate:
+MySQL e Redis rodam em containers separados. MySQL guarda a verdade do negocio; Redis guarda a fila operacional do BullMQ. As alteracoes de schema devem ser versionadas com Prisma Migrate:
 
 ```bash
 pnpm db:migrate -- --name nome_da_mudanca
@@ -166,4 +199,5 @@ prisma/
 - Segredos fiscais ficam por tenant em `TenantFiscalCredential`, criptografados em repouso.
 - `FISCAL_CREDENTIALS_ENCRYPTION_KEY` deve ser tratado como chave-mestre da aplicacao e futuramente migrado para KMS/cofre.
 - `MOCK` e o provider padrao para desenvolvimento.
+- `MOCK` so emite notas fake quando `ALLOW_MOCK_FISCAL_PROVIDER=true`.
 - Emissao real deve passar por homologacao por municipio e revisao contabil.
