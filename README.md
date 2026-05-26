@@ -139,7 +139,6 @@ Principais variaveis da API:
 - `ONBOARDING_JWT_SECRET`: assinatura dos links de onboarding.
 - `FISCAL_CREDENTIALS_ENCRYPTION_KEY`: chave-mestre para criptografar credenciais fiscais por tenant.
 - `NFEIO_BASE_URL`: URL base do provider fiscal.
-- `ALLOW_MOCK_FISCAL_PROVIDER`: habilita/desabilita emissao fake por `MOCK`.
 - `REDIS_HOST` e `REDIS_PORT`: conexao com Redis/BullMQ.
 - `FISCAL_QUEUE_ATTEMPTS`, `FISCAL_QUEUE_BACKOFF_MS` e `FISCAL_QUEUE_CONCURRENCY`: tentativas, backoff e concorrencia do worker fiscal.
 

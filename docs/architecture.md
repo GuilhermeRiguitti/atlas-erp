@@ -95,7 +95,7 @@ sequenceDiagram
   Worker->>DB: Atualiza status + payload/response + auditoria
 ```
 
-O worker usa `attempts`, `backoff` exponencial e `concurrency` configuraveis. Jobs usam `jobId` baseado no `ServiceInvoice.id`, evitando duplicidade quando o worker recupera notas pendentes. Ao iniciar, e depois em intervalo, o worker reenvia para a fila notas `QUEUED` ou `FAILED_RETRYING` sem `providerExternalId`.
+O worker usa `attempts`, `backoff` exponencial e `concurrency` configuraveis. Jobs usam `jobId` baseado no `ServiceInvoice.id`, evitando duplicidade na fila.
 
 ## Frontend
 
@@ -160,6 +160,26 @@ Enquanto o webhook real nao existe, o script de desenvolvimento gera um link val
 pnpm onboarding:token -- --email "$SEED_ADMIN_EMAIL"
 ```
 
+## Servicos e escalabilidade
+
+Cada servico roda isolado em sua propria porta:
+
+| Servico | Porta | Descricao |
+|---|---|---|
+| `mysql` | 3306 | Banco relacional, fonte da verdade permanente |
+| `redis` | 6379 | Fila BullMQ, armazenamento operacional em memoria |
+| `api` | 3333 | HTTP, NestJS |
+| `worker` | — | Sem porta HTTP, consome fila Redis |
+| `web` | 3000 | Next.js |
+
+MySQL e Redis sao independentes por proposito: o MySQL persiste os dados do negocio; o Redis armazena apenas os jobs ativos da fila. A nota fiscal existe no MySQL desde o momento em que e criada — o Redis guarda somente o identificador enquanto o job aguarda processamento.
+
+Cada servico pode escalar independentemente:
+
+- **api**: escala horizontal com multiplas instancias atras de um load balancer para suportar mais requisicoes HTTP.
+- **worker**: escala horizontal para processar mais notas em paralelo. O BullMQ garante que cada job e consumido por apenas uma instancia — sem duplicacao.
+- **mysql / redis**: escalam verticalmente ou com solucoes gerenciadas como RDS e ElastiCache.
+
 ## Banco
 
 MySQL e Redis rodam em containers separados. MySQL guarda a verdade do negocio; Redis guarda a fila operacional do BullMQ. As alteracoes de schema devem ser versionadas com Prisma Migrate:
@@ -198,6 +218,4 @@ prisma/
 - `TenantTitular` prepara a base para RBAC por empresa.
 - Segredos fiscais ficam por tenant em `TenantFiscalCredential`, criptografados em repouso.
 - `FISCAL_CREDENTIALS_ENCRYPTION_KEY` deve ser tratado como chave-mestre da aplicacao e futuramente migrado para KMS/cofre.
-- `MOCK` e o provider padrao para desenvolvimento.
-- `MOCK` so emite notas fake quando `ALLOW_MOCK_FISCAL_PROVIDER=true`.
 - Emissao real deve passar por homologacao por municipio e revisao contabil.

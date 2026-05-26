@@ -35,7 +35,7 @@ model Tenant {
   cnae                    String?
   serviceTaxCode          String?
   municipalServiceCode    String?
-  fiscalProvider          FiscalProvider           @default(MOCK)
+  fiscalProvider          FiscalProvider           @default(NFE_IO)
   fiscalProviderCompanyId String?
   contactEmail            String
   contactPhone            String?

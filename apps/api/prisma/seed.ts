@@ -61,7 +61,7 @@ async function main() {
       cnae: '6201501',
       serviceTaxCode: '01.05',
       municipalServiceCode: '0105',
-      fiscalProvider: FiscalProvider.MOCK,
+      fiscalProvider: FiscalProvider.NFE_IO,
       contactEmail: 'financeiro@atlas.dev',
       contactPhone: '11999990000',
       addressStreet: 'Rua dos Sistemas',

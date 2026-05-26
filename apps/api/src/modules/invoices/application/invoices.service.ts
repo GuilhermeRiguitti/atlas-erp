@@ -155,17 +155,14 @@ export class InvoicesService {
     });
 
     try {
-      this.ensureProviderAllowed(started.provider);
       const fiscalClient = this.fiscalProviderFactory.getClient(
         started.provider,
       );
       const fiscalCredential =
-        started.provider === FiscalProvider.MOCK
-          ? undefined
-          : await this.fiscalCredentialsService.getActiveCredential(
-              started.tenantId,
-              started.provider,
-            );
+        await this.fiscalCredentialsService.getActiveCredential(
+          started.tenantId,
+          started.provider,
+        );
       const fiscalResult = await fiscalClient.issueServiceInvoice({
         tenant: started.tenant,
         invoice: this.toFiscalProviderInvoiceInput(started),
@@ -220,34 +217,6 @@ export class InvoicesService {
     }
   }
 
-  async requeuePendingInvoices() {
-    const invoices = await this.prisma.serviceInvoice.findMany({
-      where: {
-        status: {
-          in: [
-            ServiceInvoiceStatus.QUEUED,
-            ServiceInvoiceStatus.FAILED_RETRYING,
-          ],
-        },
-        providerExternalId: null,
-      },
-      orderBy: { createdAt: 'asc' },
-      select: { id: true, tenantId: true },
-      take: Number(process.env.FISCAL_QUEUE_RECOVERY_LIMIT ?? 100),
-    });
-
-    await Promise.all(
-      invoices.map((invoice) =>
-        this.fiscalInvoiceQueueProducer.enqueueIssue({
-          invoiceId: invoice.id,
-          tenantId: invoice.tenantId,
-        }),
-      ),
-    );
-
-    return invoices.length;
-  }
-
   private async resolveIssueInput(dto: CreateServiceInvoiceDto) {
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: dto.tenantId },
@@ -271,16 +240,11 @@ export class InvoicesService {
       );
     }
 
-    const provider =
-      dto.provider ?? tenant.fiscalProvider ?? FiscalProvider.MOCK;
-    this.ensureProviderAllowed(provider);
-
-    if (provider !== FiscalProvider.MOCK) {
-      await this.fiscalCredentialsService.getActiveCredential(
-        tenant.id,
-        provider,
-      );
-    }
+    const provider = dto.provider ?? tenant.fiscalProvider;
+    await this.fiscalCredentialsService.getActiveCredential(
+      tenant.id,
+      provider,
+    );
 
     return {
       tenant,
@@ -306,17 +270,6 @@ export class InvoicesService {
           dto.borrowerZipCode ?? selectedClient?.addressZipCode ?? undefined,
       },
     };
-  }
-
-  private ensureProviderAllowed(provider: FiscalProvider) {
-    if (
-      provider === FiscalProvider.MOCK &&
-      process.env.ALLOW_MOCK_FISCAL_PROVIDER !== 'true'
-    ) {
-      throw new BadRequestException(
-        'Mock fiscal provider is disabled in this environment',
-      );
-    }
   }
 
   private toFiscalProviderInvoiceInput(

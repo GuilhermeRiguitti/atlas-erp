@@ -50,7 +50,6 @@ services:
       ONBOARDING_JWT_SECRET: local_onboarding_jwt_secret_change_me_32_chars
       FISCAL_CREDENTIALS_ENCRYPTION_KEY: local_fiscal_credentials_key_change_me_32_chars
       NFEIO_BASE_URL: https://api.nfe.io
-      ALLOW_MOCK_FISCAL_PROVIDER: "true"
       REDIS_HOST: redis
       REDIS_PORT: 6379
       FISCAL_QUEUE_ATTEMPTS: 5
@@ -76,7 +75,6 @@ services:
       ONBOARDING_JWT_SECRET: local_onboarding_jwt_secret_change_me_32_chars
       FISCAL_CREDENTIALS_ENCRYPTION_KEY: local_fiscal_credentials_key_change_me_32_chars
       NFEIO_BASE_URL: https://api.nfe.io
-      ALLOW_MOCK_FISCAL_PROVIDER: "true"
       REDIS_HOST: redis
       REDIS_PORT: 6379
       FISCAL_QUEUE_ATTEMPTS: 5
