@@ -22,20 +22,19 @@ pnpm docker:infra
 # 2. Aplica as migrations
 pnpm db:migrate:deploy
 
-# 3. Cria o usuario admin no banco
+# 3. Cria o usuario admin, o tenant demo e imprime a URL de onboarding
 pnpm db:seed
 
 # 4. Sobe a API e o frontend
 pnpm dev
-
-# 5. Gera o link de onboarding para o email do seed
-pnpm onboarding:token -- --email "admin@exemplo.com"
 ```
 
-O passo 5 imprime uma URL no terminal:
+O passo 3 imprime a URL diretamente no terminal:
 
 ```
+--- Onboarding URL (valido por 7 dias) ---
 http://localhost:3000/onboarding?token=eyJ...
+------------------------------------------
 ```
 
 Abra a URL no browser, preencha os dados da empresa e submeta. Isso cria o `Tenant` e vincula o usuario como `OWNER`.

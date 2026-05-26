@@ -17,16 +17,7 @@ Este projeto deixou de ser uma demo de portfolio e passou a ser tratado como bas
 
 ## Banco
 
-O arquivo `docker/mysql/init/01-grants.sql` limita o usuario da aplicacao ao banco do projeto:
-
-```sql
-GRANT ALL PRIVILEGES ON atlas_users.* TO 'atlas'@'%';
-FLUSH PRIVILEGES;
-```
-
-Ele nao usa mais `*.*` nem `WITH GRANT OPTION`.
-
-Importante: scripts em `/docker-entrypoint-initdb.d` so rodam quando o volume MySQL e criado pela primeira vez. Se o volume ja existia antes da correcao, recrie o volume em ambiente local ou ajuste as permissoes manualmente.
+A imagem oficial do MySQL concede automaticamente `ALL PRIVILEGES` ao usuario definido em `MYSQL_USER` sobre o banco definido em `MYSQL_DATABASE`, sem necessidade de script adicional. O scope e limitado a `atlas_users.*`, nao usa `*.*` nem `WITH GRANT OPTION`.
 
 ## API interna
 

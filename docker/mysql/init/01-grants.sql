@@ -1,2 +1,0 @@
-GRANT ALL PRIVILEGES ON atlas_users.* TO 'atlas'@'%';
-FLUSH PRIVILEGES;

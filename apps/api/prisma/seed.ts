@@ -8,6 +8,7 @@ import {
   UserStatus,
 } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { sign } from 'jsonwebtoken';
 
 const prisma = new PrismaClient();
 
@@ -121,6 +122,20 @@ async function main() {
       notes: 'Cliente seed para testar preenchimento automatico de NFS-e.',
     },
   });
+
+  const secret = process.env.ONBOARDING_JWT_SECRET;
+  if (secret) {
+    const token = sign({ purpose: 'tenant_onboarding' }, secret, {
+      expiresIn: '7d',
+      subject: admin.id,
+    });
+    const webOrigin = process.env.WEB_ORIGIN ?? 'http://localhost:3000';
+    console.log('\n--- Onboarding URL (valido por 7 dias) ---');
+    console.log(`${webOrigin}/onboarding?token=${encodeURIComponent(token)}`);
+    console.log('------------------------------------------\n');
+  } else {
+    console.warn('\nAVISO: ONBOARDING_JWT_SECRET nao configurado. URL de onboarding nao gerada.\n');
+  }
 }
 
 main()

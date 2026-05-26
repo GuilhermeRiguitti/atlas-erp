@@ -23,7 +23,6 @@
     "db:migrate:reset": "pnpm --filter api prisma:migrate:reset",
     "db:seed": "pnpm --filter api prisma:seed",
     "db:studio": "pnpm --filter api prisma:studio",
-    "onboarding:token": "pnpm --filter api onboarding:token",
     "docker:infra": "docker compose up -d mysql redis",
     "docker:up": "docker compose up --build",
     "docker:down": "docker compose down",
