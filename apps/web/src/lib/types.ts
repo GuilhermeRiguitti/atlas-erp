@@ -11,7 +11,7 @@ export type TenantTitularRole =
   | "PARTNER"
   | "ACCOUNTANT"
   | "FINANCIAL_MANAGER";
-export type FiscalProvider = "MOCK" | "NFE_IO";
+export type FiscalProvider = "NFE_IO" | "NFSE_NACIONAL";
 export type TenantFiscalCredentialStatus = "ACTIVE" | "DISABLED";
 export type ServiceInvoiceStatus =
   | "DRAFT"

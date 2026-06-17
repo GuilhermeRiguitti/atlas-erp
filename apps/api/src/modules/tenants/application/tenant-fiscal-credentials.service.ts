@@ -41,7 +41,9 @@ export class TenantFiscalCredentialsService {
       },
     });
 
-    if (!existing && !dto.apiKey) {
+    // NFE.io autentica por apiKey; NFS-e Nacional autentica por certificado A1.
+    const usesApiKeyAuth = dto.provider === FiscalProvider.NFE_IO;
+    if (!existing && usesApiKeyAuth && !dto.apiKey) {
       throw new BadRequestException('apiKey is required for new credentials');
     }
 
@@ -49,6 +51,17 @@ export class TenantFiscalCredentialsService {
       ? {
           encryptedApiKey: this.crypto.encrypt(dto.apiKey),
           apiKeyLast4: dto.apiKey.slice(-4),
+        }
+      : {};
+
+    const certificateData = dto.certificatePfxBase64
+      ? {
+          encryptedCertificatePfx: this.crypto.encrypt(
+            dto.certificatePfxBase64,
+          ),
+          encryptedCertificatePassword: this.crypto.encrypt(
+            dto.certificatePassword ?? '',
+          ),
         }
       : {};
 
@@ -66,11 +79,13 @@ export class TenantFiscalCredentialsService {
         status: dto.status ?? TenantFiscalCredentialStatus.ACTIVE,
         encryptedApiKey: apiKeyData.encryptedApiKey ?? '',
         apiKeyLast4: apiKeyData.apiKeyLast4,
+        ...certificateData,
       },
       update: {
         providerCompanyId: dto.providerCompanyId,
         status: dto.status,
         ...apiKeyData,
+        ...certificateData,
       },
     });
 
@@ -95,7 +110,15 @@ export class TenantFiscalCredentialsService {
     return {
       provider: credential.provider,
       providerCompanyId: credential.providerCompanyId,
-      apiKey: this.crypto.decrypt(credential.encryptedApiKey),
+      apiKey: credential.encryptedApiKey
+        ? this.crypto.decrypt(credential.encryptedApiKey)
+        : '',
+      certificatePfxBase64: credential.encryptedCertificatePfx
+        ? this.crypto.decrypt(credential.encryptedCertificatePfx)
+        : undefined,
+      certificatePassword: credential.encryptedCertificatePassword
+        ? this.crypto.decrypt(credential.encryptedCertificatePassword)
+        : undefined,
     };
   }
 
@@ -118,6 +141,7 @@ export class TenantFiscalCredentialsService {
       providerCompanyId: credential.providerCompanyId,
       apiKeyLast4: credential.apiKeyLast4,
       hasApiKey: Boolean(credential.encryptedApiKey),
+      hasCertificate: Boolean(credential.encryptedCertificatePfx),
       createdAt: credential.createdAt,
       updatedAt: credential.updatedAt,
     };

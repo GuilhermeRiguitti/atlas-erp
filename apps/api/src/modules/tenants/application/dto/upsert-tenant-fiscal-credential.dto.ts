@@ -14,6 +14,19 @@ export class UpsertTenantFiscalCredentialDto {
   @MinLength(8)
   apiKey?: string;
 
+  /**
+   * Certificado A1 ICP-Brasil (.pfx) em base64. Usado por providers de emissao
+   * nativa via mTLS, como a NFS-e Nacional. Criptografado em repouso.
+   */
+  @IsOptional()
+  @IsString()
+  @MinLength(16)
+  certificatePfxBase64?: string;
+
+  @IsOptional()
+  @IsString()
+  certificatePassword?: string;
+
   @IsOptional()
   @IsEnum(TenantFiscalCredentialStatus)
   status?: TenantFiscalCredentialStatus;

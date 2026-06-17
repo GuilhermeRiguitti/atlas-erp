@@ -12,7 +12,18 @@
 
 - Fila assincrona de emissao fiscal criada com Redis/BullMQ e worker separado.
 - Eventos basicos de auditoria fiscal criados para emissao, autorizacao, rejeicao e falhas.
+- Emissao nativa NFS-e Nacional (Receita Federal) criada como provider `NFSE_NACIONAL`, com DpsBuilder, DpsSigner (XMLDSIG) e modo `mock` para demonstrar sem certificado. Ver `docs/fiscal-integration.md`.
 - Proximo passo: criar outbox transacional se o sistema passar a depender de entrega garantida entre MySQL e Redis em alto volume.
+
+## NFS-e Nacional (para ir a producao real)
+
+- Adquirir certificado A1 ICP-Brasil para o CNPJ (unico custo; nao ha alternativa gratuita para emissao via API).
+- Cadastrar o PFX + senha na credencial do tenant e trocar `NFSE_NACIONAL_MODE` para `producao_restrita`.
+- Homologar no ambiente de producao restrita da Receita antes de emitir em producao.
+- Consulta por chave de acesso (`GET /service-invoices/:id/status`) e cancelamento (`POST /service-invoices/:id/cancel`) implementados com suporte a modo mock.
+- Validar layout/XSD oficial da DPS e do evento de cancelamento contra a homologacao da Receita.
+- Implementar download de XML/PDF (DANFSe).
+- Gerar `nDPS` por contador transacional por tenant/serie (hoje usa timestamp).
 
 ## Banco e Docker
 

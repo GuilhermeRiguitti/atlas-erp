@@ -7,3 +7,11 @@ coverage
 *.log
 apps/api/prisma/dev.db
 apps/api/prisma/dev.db-journal
+
+# Certificados digitais (A1 ICP-Brasil) - NUNCA versionar
+*.pfx
+*.p12
+*.cer
+*.crt
+*.key
+*.pem

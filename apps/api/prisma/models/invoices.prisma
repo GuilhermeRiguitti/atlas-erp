@@ -1,5 +1,6 @@
 enum FiscalProvider {
   NFE_IO
+  NFSE_NACIONAL
 }
 
 enum ServiceInvoiceStatus {

@@ -60,7 +60,7 @@ const taxRegimes: TenantTaxRegime[] = [
   "LUCRO_REAL",
   "MEI",
 ];
-const fiscalProviders: FiscalProvider[] = ["MOCK", "NFE_IO"];
+const fiscalProviders: FiscalProvider[] = ["NFSE_NACIONAL", "NFE_IO"];
 const fiscalCredentialStatuses: TenantFiscalCredentialStatus[] = [
   "ACTIVE",
   "DISABLED",
@@ -108,7 +108,7 @@ const emptyTenant = {
   cnae: "",
   serviceTaxCode: "",
   municipalServiceCode: "",
-  fiscalProvider: "MOCK" as FiscalProvider,
+  fiscalProvider: "NFSE_NACIONAL" as FiscalProvider,
   fiscalProviderCompanyId: "",
   contactEmail: "",
   contactPhone: "",
@@ -961,7 +961,7 @@ function FiscalCredentialsPanel({
         <Select
           label="Provider"
           value={form.provider}
-          values={fiscalProviders.filter((provider) => provider !== "MOCK")}
+          values={fiscalProviders}
           onChange={(provider) =>
             onChange({ ...form, provider: provider as FiscalProvider })
           }

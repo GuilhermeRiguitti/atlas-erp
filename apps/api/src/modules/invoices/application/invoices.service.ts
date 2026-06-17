@@ -10,6 +10,7 @@ import {
   ServiceInvoiceStatus,
 } from '@prisma/client';
 import { CreateServiceInvoiceDto } from './dto/create-service-invoice.dto';
+import { CancelServiceInvoiceDto } from './dto/cancel-service-invoice.dto';
 import { ClientsService } from '../../clients/application/clients.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TenantFiscalCredentialsService } from '../../tenants/application/tenant-fiscal-credentials.service';
@@ -215,6 +216,126 @@ export class InvoicesService {
     } catch (error) {
       await this.handleIssueFailure(started, error, context);
     }
+  }
+
+  async cancel(invoiceId: string, dto: CancelServiceInvoiceDto) {
+    const invoice = await this.prisma.serviceInvoice.findUnique({
+      where: { id: invoiceId },
+      include: { tenant: true, issuedBy: true, client: true },
+    });
+
+    if (!invoice) {
+      throw new NotFoundException('Service invoice not found');
+    }
+
+    if (invoice.status === ServiceInvoiceStatus.CANCELLED) {
+      throw new BadRequestException('Service invoice is already cancelled');
+    }
+
+    if (
+      invoice.status !== ServiceInvoiceStatus.AUTHORIZED &&
+      invoice.status !== ServiceInvoiceStatus.PROCESSING
+    ) {
+      throw new BadRequestException(
+        `Only authorized or processing invoices can be cancelled (current: ${invoice.status})`,
+      );
+    }
+
+    if (!invoice.providerExternalId) {
+      throw new BadRequestException(
+        'Service invoice has no provider reference to cancel',
+      );
+    }
+
+    const fiscalClient = this.fiscalProviderFactory.getClient(invoice.provider);
+    if (!fiscalClient.cancelServiceInvoice) {
+      throw new BadRequestException(
+        `Provider ${invoice.provider} does not support cancellation`,
+      );
+    }
+
+    const credential = await this.fiscalCredentialsService.getActiveCredential(
+      invoice.tenantId,
+      invoice.provider,
+    );
+
+    const result = await fiscalClient.cancelServiceInvoice({
+      tenant: invoice.tenant,
+      accessKey: invoice.providerExternalId,
+      reason: dto.reason,
+      credential,
+    });
+
+    const updated = await this.prisma.serviceInvoice.update({
+      where: { id: invoice.id },
+      data: {
+        status: ServiceInvoiceStatus.CANCELLED,
+        providerResponse: result.providerResponse as Prisma.InputJsonValue,
+      },
+      include: { tenant: true, issuedBy: true, client: true },
+    });
+
+    await this.recordAuditEvent(this.prisma, {
+      tenantId: updated.tenantId,
+      serviceInvoiceId: updated.id,
+      actorUserId: dto.actorUserId ?? updated.issuedByUserId,
+      type: FiscalAuditEventType.INVOICE_CANCELLED,
+      message: 'Service invoice cancelled.',
+      metadata: {
+        reason: dto.reason,
+        provider: updated.provider,
+        eventId: result.eventId,
+      },
+    });
+
+    return this.serializeInvoice(updated);
+  }
+
+  async refreshStatus(invoiceId: string) {
+    const invoice = await this.prisma.serviceInvoice.findUnique({
+      where: { id: invoiceId },
+      include: { tenant: true, issuedBy: true, client: true },
+    });
+
+    if (!invoice) {
+      throw new NotFoundException('Service invoice not found');
+    }
+
+    const fiscalClient = this.fiscalProviderFactory.getClient(invoice.provider);
+    if (!fiscalClient.getServiceInvoiceStatus || !invoice.providerExternalId) {
+      return this.serializeInvoice(invoice);
+    }
+
+    const credential = await this.fiscalCredentialsService.getActiveCredential(
+      invoice.tenantId,
+      invoice.provider,
+    );
+
+    const result = await fiscalClient.getServiceInvoiceStatus({
+      tenant: invoice.tenant,
+      accessKey: invoice.providerExternalId,
+      credential,
+    });
+
+    const nextStatus = ServiceInvoiceStatus[result.status];
+    if (nextStatus === invoice.status) {
+      return this.serializeInvoice(invoice);
+    }
+
+    const updated = await this.prisma.serviceInvoice.update({
+      where: { id: invoice.id },
+      data: {
+        status: nextStatus,
+        providerResponse: result.providerResponse as Prisma.InputJsonValue,
+        issuedAt:
+          nextStatus === ServiceInvoiceStatus.AUTHORIZED && !invoice.issuedAt
+            ? new Date()
+            : undefined,
+      },
+      include: { tenant: true, issuedBy: true, client: true },
+    });
+
+    return this.serializeInvoice(updated);
   }
 
   private async resolveIssueInput(dto: CreateServiceInvoiceDto) {

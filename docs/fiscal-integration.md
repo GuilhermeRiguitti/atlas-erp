@@ -4,10 +4,58 @@
 
 A emissao de nota fiscal de servico foi desenhada com adapter de provider. Hoje existem dois caminhos:
 
-- `MOCK`: provider local para desenvolvimento e testes sem envio real.
-- `NFE_IO`: adapter inicial para NFE.io, configurado por credenciais criptografadas por tenant.
+- `NFE_IO`: adapter para a API paga da NFE.io, autenticada por apiKey criptografada por tenant.
+- `NFSE_NACIONAL`: emissao nativa pelo Sistema Nacional NFS-e da Receita Federal (SEFIN/ADN), sem intermediario pago.
 
 Essa separacao evita acoplar o ERP a um fornecedor fiscal antes de validar municipio, certificado, regime tributario, custo e suporte.
+
+## Emissao nativa: NFS-e Nacional (provider padrao do projeto)
+
+A partir de 2026 o municipio de Muriae/MG (e a maioria do Brasil) desativou o emissor municipal e passou a usar exclusivamente o Emissor Nacional da Receita Federal. MEIs ja eram obrigados ao padrao nacional desde 2023. Por isso o ERP integra direto com a API Nacional, sem custo de intermediario.
+
+Existem dois acessos a NFS-e Nacional:
+
+- Portal/app Emissor Nacional (login gov.br): emissao manual, gratuita, sem certificado. Nao serve para integracao via codigo.
+- API REST SEFIN/ADN: integracao programatica usada pelo ERP. Exige certificado A1 ICP-Brasil (mTLS). O certificado e o unico custo (~R$100-150/ano) e nao tem alternativa gratuita para emissao automatizada.
+
+### Modos do adapter (`NFSE_NACIONAL_MODE`)
+
+- `mock` (padrao): monta a DPS real, mas substitui assinatura e rede por uma resposta fiel ao contrato (chave de acesso de 50 digitos, XML simulado, status `AUTHORIZED`). Permite demonstrar a emissao nativa ponta a ponta sem certificado e sem homologacao.
+- `producao_restrita`: ambiente oficial de homologacao da Receita. Exige certificado A1 configurado no tenant.
+- `producao`: emissao real.
+
+Para ativar a emissao real basta configurar o certificado no tenant e trocar `NFSE_NACIONAL_MODE` para `producao_restrita` ou `producao`. O codigo de montagem da DPS e o mesmo nos tres modos.
+
+### Contrato da API Nacional (SEFIN/ADN)
+
+- `POST /nfse`: recebe a DPS assinada (XMLDSIG) em GZip+Base64 e gera a NFS-e (sincrono).
+- `GET /nfse/{chaveAcesso}`: retorna o XML autorizado (GZip+Base64).
+- `GET /dps/{id}` e `HEAD /dps/{id}`: consulta da DPS.
+- `POST /nfse/{chaveAcesso}/eventos`: eventos como cancelamento.
+- Autenticacao: mTLS com certificado ICP-Brasil A1/A3 (o certificado e a credencial; nao ha apiKey).
+
+### Endpoints do ERP
+
+- `POST /service-invoices`: cria a nota e enfileira a emissao.
+- `POST /service-invoices/:id/cancel`: cancela uma nota autorizada/processando (body `{ reason }`). No padrao nacional gera evento `101101` assinado em `POST /nfse/{chave}/eventos`.
+- `GET /service-invoices/:id/status`: consulta o status atual no provider e atualiza o banco.
+
+O cancelamento e a consulta sao operacoes opcionais da interface `FiscalProviderClient`; o adapter NFS-e Nacional implementa ambas (NFE.io ainda nao). No modo mock as duas operam sem certificado nem rede.
+
+### Fluxo interno do provider
+
+1. `DpsBuilder` monta a DPS (XML, namespace `http://www.sped.fazenda.gov.br/nfse`) a partir do tenant e da nota.
+2. `DpsSigner` assina a DPS com XMLDSIG usando o PFX do tenant (lazy-load de `node-forge`/`xml-crypto`; pulado no modo mock).
+3. A DPS assinada e compactada (GZip) e codificada em Base64 e enviada via `POST /nfse` por mTLS.
+4. A resposta traz a chave de acesso de 50 digitos, salva em `providerExternalId`, e o XML autorizado.
+
+### Certificado A1 do tenant
+
+O PFX (.pfx em base64) e a senha sao enviados em `PUT /tenants/:id/fiscal-credentials` e ficam criptografados em repouso (AES-256-GCM) nos campos `encryptedCertificatePfx` e `encryptedCertificatePassword`. Para emissao real, configure no tenant:
+
+- `fiscalProvider = NFSE_NACIONAL`
+- `certificatePfxBase64` e `certificatePassword` na credencial
+- `NFSE_NACIONAL_MODE` e `NFSE_NACIONAL_BASE_URL` no ambiente
 
 ## Provedores avaliados
 

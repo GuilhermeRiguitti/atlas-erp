@@ -22,7 +22,7 @@ type OnboardingResponse = {
 };
 
 const taxRegimes: TenantTaxRegime[] = ["SIMPLES_NACIONAL", "LUCRO_PRESUMIDO", "LUCRO_REAL", "MEI"];
-const fiscalProviders: FiscalProvider[] = ["MOCK", "NFE_IO"];
+const fiscalProviders: FiscalProvider[] = ["NFSE_NACIONAL", "NFE_IO"];
 
 const emptyTenant = {
   legalName: "",
@@ -34,7 +34,7 @@ const emptyTenant = {
   cnae: "",
   serviceTaxCode: "",
   municipalServiceCode: "",
-  fiscalProvider: "MOCK" as FiscalProvider,
+  fiscalProvider: "NFSE_NACIONAL" as FiscalProvider,
   fiscalProviderCompanyId: "",
   contactEmail: "",
   contactPhone: "",
