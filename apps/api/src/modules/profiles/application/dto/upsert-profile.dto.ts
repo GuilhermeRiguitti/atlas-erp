@@ -1,35 +1,32 @@
-import { IsOptional, IsString, IsUrl, MinLength } from 'class-validator';
+import { IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
 
 export class UpsertProfileDto {
+  @IsOptional()
   @IsString()
-  @MinLength(4)
-  headline: string;
+  @MaxLength(40)
+  phone?: string;
 
+  @IsOptional()
   @IsString()
-  @MinLength(20)
-  bio: string;
+  @MaxLength(120)
+  jobTitle?: string;
 
+  @IsOptional()
   @IsString()
-  location: string;
-
-  @IsString()
-  seniority: string;
-
-  @IsString()
-  skills: string;
-
-  @IsString()
-  availability: string;
+  @MaxLength(120)
+  department?: string;
 
   @IsOptional()
   @IsUrl()
-  website?: string;
+  avatarUrl?: string;
 
   @IsOptional()
-  @IsUrl()
-  github?: string;
+  @IsString()
+  @MaxLength(20)
+  locale?: string;
 
   @IsOptional()
-  @IsUrl()
-  linkedin?: string;
+  @IsString()
+  @MaxLength(60)
+  timezone?: string;
 }

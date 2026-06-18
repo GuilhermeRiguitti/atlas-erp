@@ -41,7 +41,6 @@ export class UsersService {
             OR: [
               { name: { contains: query } },
               { email: { contains: query } },
-              { profile: { headline: { contains: query } } },
             ],
           }
         : undefined,

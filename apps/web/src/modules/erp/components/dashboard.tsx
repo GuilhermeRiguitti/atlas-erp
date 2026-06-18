@@ -51,7 +51,7 @@ type DashboardProps = {
 
 type Tab = "tenants" | "clients" | "invoices" | "users";
 
-const roles: UserRole[] = ["ADMIN", "MEMBER", "RECRUITER"];
+const roles: UserRole[] = ["ADMIN", "MEMBER"];
 const statuses: UserStatus[] = ["ACTIVE", "INVITED", "SUSPENDED"];
 const tenantStatuses: TenantStatus[] = ["ACTIVE", "ONBOARDING", "SUSPENDED"];
 const taxRegimes: TenantTaxRegime[] = [

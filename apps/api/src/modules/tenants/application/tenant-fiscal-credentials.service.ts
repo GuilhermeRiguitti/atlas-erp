@@ -10,6 +10,7 @@ import {
 } from '@prisma/client';
 import { UpsertTenantFiscalCredentialDto } from './dto/upsert-tenant-fiscal-credential.dto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CertificateValidatorService } from '../infrastructure/certificate-validator.service';
 import { TenantSecretCryptoService } from '../infrastructure/tenant-secret-crypto.service';
 
 @Injectable()
@@ -17,6 +18,7 @@ export class TenantFiscalCredentialsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly crypto: TenantSecretCryptoService,
+    private readonly certificateValidator: CertificateValidatorService,
   ) {}
 
   async findAll(tenantId: string) {
@@ -30,7 +32,20 @@ export class TenantFiscalCredentialsService {
   }
 
   async upsert(tenantId: string, dto: UpsertTenantFiscalCredentialDto) {
-    await this.ensureTenantExists(tenantId);
+    const tenant = await this.ensureTenantExists(tenantId);
+
+    if (dto.certificatePfxBase64) {
+      if (!dto.certificatePassword) {
+        throw new BadRequestException(
+          'certificatePassword e obrigatorio ao enviar um certificado',
+        );
+      }
+      this.certificateValidator.validate({
+        pfxBase64: dto.certificatePfxBase64,
+        password: dto.certificatePassword,
+        expectedCnpj: tenant.cnpj,
+      });
+    }
 
     const existing = await this.prisma.tenantFiscalCredential.findUnique({
       where: {
@@ -125,11 +140,12 @@ export class TenantFiscalCredentialsService {
   private async ensureTenantExists(tenantId: string) {
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
-      select: { id: true },
+      select: { id: true, cnpj: true },
     });
     if (!tenant) {
       throw new NotFoundException('Tenant not found');
     }
+    return tenant;
   }
 
   private serialize(credential: TenantFiscalCredential) {

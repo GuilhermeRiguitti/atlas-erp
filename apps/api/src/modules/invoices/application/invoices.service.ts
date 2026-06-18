@@ -12,6 +12,8 @@ import {
 import { CreateServiceInvoiceDto } from './dto/create-service-invoice.dto';
 import { CancelServiceInvoiceDto } from './dto/cancel-service-invoice.dto';
 import { ClientsService } from '../../clients/application/clients.service';
+import type { AuthContext } from '../../authorization/auth-context';
+import { TenantAccessService } from '../../authorization/tenant-access.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TenantFiscalCredentialsService } from '../../tenants/application/tenant-fiscal-credentials.service';
 import { FiscalProviderFactory } from '../infrastructure/fiscal-providers/fiscal-provider.factory';
@@ -33,9 +35,16 @@ export class InvoicesService {
     private readonly clientsService: ClientsService,
     private readonly fiscalCredentialsService: TenantFiscalCredentialsService,
     private readonly fiscalInvoiceQueueProducer: FiscalInvoiceQueueProducer,
+    private readonly tenantAccess: TenantAccessService,
   ) {}
 
-  async findAll(tenantId?: string) {
+  async findAll(auth: AuthContext, tenantId?: string) {
+    if (tenantId) {
+      await this.tenantAccess.assertTenantAccess(auth, tenantId);
+    } else if (!this.tenantAccess.isPlatformAdmin(auth)) {
+      throw new BadRequestException('tenantId is required');
+    }
+
     const invoices = await this.prisma.serviceInvoice.findMany({
       where: tenantId ? { tenantId } : undefined,
       include: { tenant: true, issuedBy: true, client: true },
@@ -45,7 +54,8 @@ export class InvoicesService {
     return invoices.map((invoice) => this.serializeInvoice(invoice));
   }
 
-  async issue(dto: CreateServiceInvoiceDto) {
+  async issue(dto: CreateServiceInvoiceDto, auth: AuthContext) {
+    await this.tenantAccess.assertTenantAccess(auth, dto.tenantId);
     const { invoiceInput, provider } = await this.resolveIssueInput(dto);
     const now = new Date();
 
@@ -218,7 +228,11 @@ export class InvoicesService {
     }
   }
 
-  async cancel(invoiceId: string, dto: CancelServiceInvoiceDto) {
+  async cancel(
+    invoiceId: string,
+    dto: CancelServiceInvoiceDto,
+    auth: AuthContext,
+  ) {
     const invoice = await this.prisma.serviceInvoice.findUnique({
       where: { id: invoiceId },
       include: { tenant: true, issuedBy: true, client: true },
@@ -227,6 +241,8 @@ export class InvoicesService {
     if (!invoice) {
       throw new NotFoundException('Service invoice not found');
     }
+
+    await this.tenantAccess.assertTenantAccess(auth, invoice.tenantId);
 
     if (invoice.status === ServiceInvoiceStatus.CANCELLED) {
       throw new BadRequestException('Service invoice is already cancelled');
@@ -291,7 +307,7 @@ export class InvoicesService {
     return this.serializeInvoice(updated);
   }
 
-  async refreshStatus(invoiceId: string) {
+  async refreshStatus(invoiceId: string, auth: AuthContext) {
     const invoice = await this.prisma.serviceInvoice.findUnique({
       where: { id: invoiceId },
       include: { tenant: true, issuedBy: true, client: true },
@@ -300,6 +316,8 @@ export class InvoicesService {
     if (!invoice) {
       throw new NotFoundException('Service invoice not found');
     }
+
+    await this.tenantAccess.assertTenantAccess(auth, invoice.tenantId);
 
     const fiscalClient = this.fiscalProviderFactory.getClient(invoice.provider);
     if (!fiscalClient.getServiceInvoiceStatus || !invoice.providerExternalId) {

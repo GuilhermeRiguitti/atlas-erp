@@ -1,4 +1,4 @@
-export type UserRole = "ADMIN" | "MEMBER" | "RECRUITER";
+export type UserRole = "ADMIN" | "MEMBER";
 export type UserStatus = "ACTIVE" | "INVITED" | "SUSPENDED";
 export type TenantStatus = "ACTIVE" | "ONBOARDING" | "SUSPENDED";
 export type TenantTaxRegime =
@@ -25,17 +25,14 @@ export type ServiceInvoiceStatus =
 export type ClientType = "INDIVIDUAL" | "COMPANY";
 export type ClientStatus = "ACTIVE" | "INACTIVE";
 
-export type TalentProfile = {
+export type UserProfile = {
   id: string;
-  headline: string;
-  bio: string;
-  location: string;
-  seniority: string;
-  skills: string;
-  availability: string;
-  website?: string | null;
-  github?: string | null;
-  linkedin?: string | null;
+  phone?: string | null;
+  jobTitle?: string | null;
+  department?: string | null;
+  avatarUrl?: string | null;
+  locale?: string | null;
+  timezone?: string | null;
   userId: string;
 };
 
@@ -47,7 +44,7 @@ export type User = {
   status: UserStatus;
   createdAt: string;
   updatedAt: string;
-  profile?: TalentProfile | null;
+  profile?: UserProfile | null;
 };
 
 export type TenantTitular = {

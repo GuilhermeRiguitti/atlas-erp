@@ -56,17 +56,23 @@ export class TenantsService {
     private readonly usersService: UsersService,
   ) {}
 
-  async findAll(query?: string) {
+  async findAll(query?: string, accessWhere?: Prisma.TenantWhereInput) {
+    const searchWhere: Prisma.TenantWhereInput | undefined = query
+      ? {
+          OR: [
+            { legalName: { contains: query } },
+            { tradeName: { contains: query } },
+            { cnpj: { contains: query.replace(/\D/g, '') } },
+          ],
+        }
+      : undefined;
+
+    const conditions = [accessWhere, searchWhere].filter(
+      (condition): condition is Prisma.TenantWhereInput => Boolean(condition),
+    );
+
     const tenants = await this.prisma.tenant.findMany({
-      where: query
-        ? {
-            OR: [
-              { legalName: { contains: query } },
-              { tradeName: { contains: query } },
-              { cnpj: { contains: query.replace(/\D/g, '') } },
-            ],
-          }
-        : undefined,
+      where: conditions.length ? { AND: conditions } : undefined,
       orderBy: { createdAt: 'desc' },
       include: tenantInclude,
     });

@@ -1,7 +1,6 @@
 enum UserRole {
   ADMIN
   MEMBER
-  RECRUITER
 }
 
 enum UserStatus {
@@ -30,18 +29,15 @@ model User {
 }
 
 model UserProfile {
-  id           String   @id @default(cuid())
-  headline     String
-  bio          String   @db.Text
-  location     String
-  seniority    String
-  skills       String   @db.Text
-  availability String
-  website      String?
-  github       String?
-  linkedin     String?
-  userId       String   @unique
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id         String   @id @default(cuid())
+  phone      String?
+  jobTitle   String?
+  department String?
+  avatarUrl  String?
+  locale     String?
+  timezone   String?
+  userId     String   @unique
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }

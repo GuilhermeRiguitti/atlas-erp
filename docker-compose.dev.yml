@@ -1,0 +1,164 @@
+# Ambiente de DESENVOLVIMENTO.
+# - Um container por servico (mysql, redis, api, worker, web) -> mesma topologia da Oracle.
+# - O codigo entra por BIND MOUNT (.:/app), entao editar no host reflete na hora (hot reload).
+# - node_modules ficam em volumes nomeados para nao serem "tapados" pelo bind mount
+#   e para nao misturar os binarios do host (Windows/WSL) com os do container (Linux).
+#
+# Uso (de dentro do WSL, na pasta do projeto):
+#   docker compose -f docker-compose.dev.yml up --build
+#   docker compose -f docker-compose.dev.yml down
+#
+# Producao/Oracle continua usando o docker-compose.prod.yml (imagem buildada).
+
+# --- Blocos reutilizaveis -----------------------------------------------------
+x-dev-build: &dev-build
+  build:
+    context: .
+    target: dev
+  image: atlas-dev
+
+# Volumes que sobrepoem os node_modules do bind mount (mantem os do container).
+x-node-modules: &node-modules
+  - .:/app
+  - root_node_modules:/app/node_modules
+  - api_node_modules:/app/apps/api/node_modules
+  - web_node_modules:/app/apps/web/node_modules
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: atlas-dev-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: atlas_users
+      MYSQL_USER: atlas
+      MYSQL_PASSWORD: atlas_password
+      MYSQL_ROOT_PASSWORD: root_password
+    command: --log-bin-trust-function-creators=1
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h 127.0.0.1 -uatlas -patlas_password --silent",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: atlas-dev-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One-shot: gera o client, aplica migrations e roda o seed; depois SAI.
+  # A API espera este servico terminar com sucesso, entao falha de seed nao
+  # vira crash-loop da API (foi exatamente esse o bug do setup antigo).
+  migrate:
+    <<: *dev-build
+    container_name: atlas-dev-migrate
+    command: >
+      sh -c "pnpm --filter api prisma:generate &&
+             pnpm --filter api prisma:migrate:deploy &&
+             pnpm --filter api prisma:seed"
+    environment:
+      DATABASE_URL: mysql://atlas:atlas_password@mysql:3306/atlas_users
+      NODE_ENV: development
+      WEB_ORIGIN: http://localhost:3000
+      ONBOARDING_JWT_SECRET: local_onboarding_jwt_secret_change_me_32_chars
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@atlas.dev}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-teste1234}
+    volumes: *node-modules
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  api:
+    <<: *dev-build
+    container_name: atlas-dev-api
+    restart: unless-stopped
+    command: pnpm --filter api start:dev
+    environment:
+      DATABASE_URL: mysql://atlas:atlas_password@mysql:3306/atlas_users
+      PORT: 3333
+      NODE_ENV: development
+      WEB_ORIGIN: http://localhost:3000
+      INTERNAL_API_KEY: local_internal_api_key_change_me_32_chars
+      ONBOARDING_JWT_SECRET: local_onboarding_jwt_secret_change_me_32_chars
+      FISCAL_CREDENTIALS_ENCRYPTION_KEY: local_fiscal_credentials_key_change_me_32_chars
+      NFEIO_BASE_URL: https://api.nfe.io
+      NFSE_NACIONAL_MODE: mock
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      FISCAL_QUEUE_ATTEMPTS: 5
+      FISCAL_QUEUE_BACKOFF_MS: 30000
+    ports:
+      - "127.0.0.1:3333:3333"
+    volumes: *node-modules
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    <<: *dev-build
+    container_name: atlas-dev-worker
+    restart: unless-stopped
+    command: pnpm --filter api worker:dev
+    environment:
+      DATABASE_URL: mysql://atlas:atlas_password@mysql:3306/atlas_users
+      NODE_ENV: development
+      INTERNAL_API_KEY: local_internal_api_key_change_me_32_chars
+      ONBOARDING_JWT_SECRET: local_onboarding_jwt_secret_change_me_32_chars
+      FISCAL_CREDENTIALS_ENCRYPTION_KEY: local_fiscal_credentials_key_change_me_32_chars
+      NFEIO_BASE_URL: https://api.nfe.io
+      NFSE_NACIONAL_MODE: mock
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      FISCAL_QUEUE_ATTEMPTS: 5
+      FISCAL_QUEUE_BACKOFF_MS: 30000
+      FISCAL_QUEUE_CONCURRENCY: 2
+    volumes: *node-modules
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    <<: *dev-build
+    container_name: atlas-dev-web
+    restart: unless-stopped
+    command: pnpm --filter web dev
+    environment:
+      API_URL: http://api:3333
+      API_INTERNAL_KEY: local_internal_api_key_change_me_32_chars
+      NEXT_PUBLIC_APP_NAME: ERP Fiscal
+      IRON_SESSION_PASSWORD: local_iron_session_password_change_me_32_chars
+      NODE_ENV: development
+    ports:
+      - "3000:3000"
+    volumes: *node-modules
+    depends_on:
+      - api
+
+volumes:
+  mysql_data:
+  root_node_modules:
+  api_node_modules:
+  web_node_modules:

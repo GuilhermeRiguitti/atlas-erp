@@ -39,12 +39,10 @@ async function main() {
       status: UserStatus.ACTIVE,
       profile: {
         create: {
-          headline: 'ERP Fiscal Administrator',
-          bio: 'Construo produtos internos com foco em clareza operacional, segurança e velocidade de entrega.',
-          location: 'Sao Paulo, BR',
-          seniority: 'Admin',
-          skills: 'ERP Fiscal, NFS-e, Tenants',
-          availability: 'Local development only',
+          jobTitle: 'Administrador da plataforma',
+          department: 'Operacoes',
+          locale: 'pt-BR',
+          timezone: 'America/Sao_Paulo',
         },
       },
     },
