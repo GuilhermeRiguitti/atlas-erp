@@ -5,6 +5,7 @@
   "description": "Multi-tenant fiscal ERP SaaS with NestJS, Next.js, Prisma, MySQL and iron-session authentication.",
   "packageManager": "pnpm@11.1.1",
   "scripts": {
+    "dev": "pnpm dev:all",
     "dev:all": "concurrently -n api,web,worker -c blue,green,magenta \"pnpm dev:api\" \"pnpm dev:web\" \"pnpm dev:worker\"",
     "dev:no-worker": "pnpm --parallel --filter api --filter web dev",
     "dev:api": "pnpm --filter api start:dev",

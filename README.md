@@ -19,7 +19,7 @@ Monorepo de mini ERP fiscal com empresas emissoras, clientes, titulares, usuario
 - `service invoices`: emissao e historico de NFS-e por provider fiscal, com fila em background para processamento fiscal
 - `queue`: configuracao BullMQ/Redis usada por API e worker fiscal
 - `users`: CRUD completo de usuarios
-- `profiles`: modulo ligado ao usuario para perfil profissional, skills e disponibilidade
+- `profiles`: perfil operacional do usuario (cargo, departamento, contato, locale/timezone)
 - `prisma`: PrismaService global para acesso ao banco
 
 ## Estrutura
@@ -57,27 +57,40 @@ pnpm lint
 pnpm test
 pnpm docker:infra
 pnpm db:studio
-pnpm onboarding:token -- --email "$SEED_ADMIN_EMAIL"
 ```
 
 ## Docker
 
-O ambiente Docker usa containers separados para `mysql`, `redis`, `api`, `worker` e `web`. Esse e o arranjo recomendado: banco e fila ficam persistentes/isolados, enquanto frontend, backend e worker podem ser rebuildados ou reiniciados sem apagar dados.
+Tres arquivos compose, por finalidade:
 
-O `docker-compose.yml` e voltado para desenvolvimento local. MySQL e API ficam publicados apenas em `127.0.0.1`, nao em todas as interfaces da maquina.
+- `docker-compose.dev.yml`: desenvolvimento em containers com hot reload (bind mount do codigo). Um container por servico (`mysql`, `redis`, `migrate`, `api`, `worker`, `web`), mesma topologia da producao. `node_modules` ficam em volumes nomeados para nao misturar binarios do host com os do container.
+- `docker-compose.yml`: variante local baseada em imagem buildada (sem hot reload). MySQL e API publicados apenas em `127.0.0.1`.
+- `docker-compose.prod.yml`: producao (ex.: Oracle), sem publicar portas para fora da rede Docker, exceto o `web`.
 
-Para desenvolver local com Node no host:
+### Dev em containers (recomendado no WSL2)
 
 ```bash
-pnpm docker:infra
-pnpm db:migrate:deploy
-pnpm dev
+pnpm dev:up      # sobe tudo com build e hot reload
+pnpm dev:logs    # acompanha os logs
+pnpm dev:down    # derruba os containers
+pnpm dev:migrate # one-shot: generate + migrate deploy + seed
+pnpm dev:reset   # derruba e apaga os volumes (banco zerado)
 ```
 
-`pnpm docker:infra` sobe apenas `mysql` e `redis`.
+O servico `migrate` roda uma vez (generate + migrate deploy + seed) e a API so sobe depois que ele termina com sucesso, evitando crash-loop por erro de seed.
+
+### Dev com Node no host (alternativa)
 
 ```bash
-pnpm docker:up
+pnpm docker:infra      # sobe apenas mysql e redis
+pnpm db:migrate:deploy
+pnpm dev               # api + web + worker em paralelo
+```
+
+```bash
+pnpm docker:up     # docker compose up --build
+pnpm docker:down   # derruba os containers
+pnpm docker:logs   # acompanha os logs
 ```
 
 Ou diretamente:
@@ -152,10 +165,10 @@ O fluxo esperado para o gateway de pagamento e:
 4. Cliente recebe a URL `/onboarding?token=...`.
 5. O ERP valida o token, abre o formulario do tenant e cria `TenantTitular` como `OWNER`.
 
-Para simular localmente:
+Para simular localmente, rode o seed: ele cria o admin e imprime no console uma URL de onboarding valida por 7 dias.
 
 ```bash
-pnpm onboarding:token -- --email "$SEED_ADMIN_EMAIL"
+pnpm db:seed
 ```
 
 ## Documentacao
