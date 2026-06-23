@@ -28,11 +28,16 @@ RUN pnpm build
 FROM base AS runner
 ENV NODE_ENV=production
 WORKDIR /app
-COPY --from=builder /app ./
+# Copia os artefatos ja com dono nao-root e roda como usuario sem privilegio.
+COPY --from=builder --chown=node:node /app ./
+USER node
 
+# Migrations NAO rodam no start da API (evita corrida ao escalar replicas).
+# Em producao, rode-as como job one-shot separado (ver servico `migrate` no
+# docker-compose.prod.yml).
 FROM runner AS api
 EXPOSE 3333
-CMD ["sh", "-c", "pnpm --filter api prisma:migrate:deploy && pnpm --filter api start:prod"]
+CMD ["pnpm", "--filter", "api", "start:prod"]
 
 FROM runner AS web
 EXPOSE 3000

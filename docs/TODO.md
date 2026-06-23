@@ -93,6 +93,39 @@ privilegio, validacao de certificado A1 no upload, e limpou vestigios de portfol
 - Plano de disaster recovery (RPO/RTO definidos).
 - Monitoramento e alerta de comportamento anomalo (picos de emissao, descriptografias fora do padrao).
 
+## Escalabilidade e producao
+
+> A base ja escala bem em desenho: web e API stateless (sessao em cookie
+> iron-session, sem store no servidor), worker fiscal separado e fila BullMQ
+> (multiplos workers). Os itens abaixo sao preparo de producao/escala horizontal.
+
+### Imagem e deploy
+
+- [FEITO] Dockerfile `runner` roda como usuario nao-root (`USER node`).
+- [FEITO] Migrations como job one-shot separado no `docker-compose.prod.yml` (api/worker dependem do servico `migrate`), evitando corrida ao escalar replicas. Dockerfile `api` nao migra mais no start.
+- Imagem de runtime ainda carrega devDependencies + codigo-fonte (o `runner` faz `COPY` de tudo). Reduzir: podar para prod (`pnpm deploy --prod`) e Next `output: 'standalone'`. Validar o build no WSL2.
+- Pinar imagens base por digest e adicionar HEALTHCHECK/readiness para o orquestrador.
+
+### Camada de dados (maior risco de escala)
+
+- Paginacao em TODAS as listagens: `tenants`, `users`, `clients` e `service-invoices` fazem `findMany` sem `take`/`skip`/cursor. Em volume isso retorna tudo de uma vez -> memoria/latencia/payload gigantes.
+- Busca com `contains` (LIKE '%q%') nao usa indice; em escala vira full table scan. Avaliar indice FULLTEXT do MySQL ou outra estrategia de busca.
+- Tunar pool de conexoes do Prisma (`connection_limit` na `DATABASE_URL`) e considerar um pooler externo quando houver muitas replicas de api/worker (estourar `max_connections` do MySQL).
+- MySQL roda como container com volume local: single point of failure, sem HA. Para escala real, banco gerenciado/replicado.
+- Outbox transacional para entrega garantida MySQL->Redis em alto volume (ja citado em Integracoes).
+
+### Camada de aplicacao
+
+- Manter web/api stateless e worker separado (ja correto). BullMQ permite escalar workers horizontalmente.
+- Rate limiting (ver Seguranca) tambem protege contra abuso em escala.
+- Cache em Redis para leituras quentes (ex.: config fiscal do tenant) se virar gargalo.
+
+### Operacao / observabilidade
+
+- Reverse proxy/load balancer com TLS na frente do `web` (hoje o compose.prod publica o web direto).
+- Logging estruturado, metricas e tracing para operar em escala.
+- Healthcheck de api/web no compose.prod (a API ja tem `/` liberado para health).
+
 ## Documentacao desatualizada
 
 - `docs/security-hardening.md` ainda descreve o provider `MOCK` removido e `ALLOW_MOCK_FISCAL_PROVIDER`; atualizar para refletir `NFSE_NACIONAL` + `NFSE_NACIONAL_MODE`.
